@@ -1,5 +1,6 @@
 // Copyright 1998-2019 Epic Games, Inc. All Rights Reserved.
 
+using System.IO;
 using UnrealBuildTool;
 
 public class ShaderDirectory : ModuleRules
@@ -11,6 +12,7 @@ public class ShaderDirectory : ModuleRules
 		PublicIncludePaths.AddRange(
 			new string[] {
 				// ... add public include paths required here ...
+				Path.Combine(GetModuleDirectory("Renderer"), "Private"),
 			}
 			);
 				
@@ -25,7 +27,7 @@ public class ShaderDirectory : ModuleRules
 		PublicDependencyModuleNames.AddRange(
 			new string[]
 			{
-				"Core",
+				"Core", "RHI", "Engine"
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);
@@ -38,7 +40,8 @@ public class ShaderDirectory : ModuleRules
 				"Engine",
 				"Slate",
 				"SlateCore",
-                "RenderCore"
+                "RenderCore", 
+                "Renderer"
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);

@@ -1,0 +1,12 @@
+#include "/Engine/Private/Common.ush"
+#include "/Engine/Private/DeferredShadingCommon.ush"
+
+RWTexture2D<float4> SceneColorTexture;
+
+[numthreads(THREADS_X, THREADS_Y, 1)]
+void NormalACS(uint3 DispatchThreadID : SV_DispatchThreadID, uint3 GroupThreadID : SV_GroupThreadID)
+{
+    const float4 SceneColour = SceneColorTexture[DispatchThreadID.xy];
+    float3 SceneColourOut = SceneColour.rgb;
+    SceneColorTexture[DispatchThreadID.xy] = saturate(float4(SceneColourOut.b, SceneColourOut.g, SceneColourOut.r, SceneColour.a));
+}
