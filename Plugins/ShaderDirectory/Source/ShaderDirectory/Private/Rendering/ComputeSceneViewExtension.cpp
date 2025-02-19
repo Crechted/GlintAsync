@@ -5,10 +5,11 @@
 #include "RenderGraphBuilder.h"
 #include "RenderTargetPool.h"
 #include "Engine/TextureRenderTarget2D.h"
-#include "ShaderPasses/NormalComputeCS.h"
+#include "ShaderPasses/NormalOneCS.h"
 
 #include "RenderGraphUtils.h"
 #include "PostProcess/PostProcessing.h"
+#include "ShaderPasses/NormalTwoCS.h"
 
 DECLARE_GPU_DRAWCALL_STAT(NormalCompute); // Unreal Insights
 
@@ -21,16 +22,20 @@ void FComputeSceneViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& Gr
 {
     FSceneViewExtensionBase::PrePostProcessPass_RenderThread(GraphBuilder, View, Inputs);
 
-    if (RenderTargetSource == nullptr || NormalSource == nullptr)
-    {
-        return;
-    }
+    if (!NormalOneRTSource || !NormalTwoRTSource || !NormalOneSource) return;
 
-    if (!PooledRenderTarget.IsValid())
+    if (!PooledNormalOneRT.IsValid())
     {
         // Only needs to be done once
-        // However, if you modify the render target asset, eg: change the resolution or pixel format, you may need to recreate the PooledRenderTarget object
-        CreatePooledRenderTarget_RenderThread();
+        // However, if you modify the render target asset, eg: change the resolution or pixel format, you may need to recreate the PooledNormalOneRT object
+        PooledNormalOneRT = CreatePooledRenderTarget_RenderThread(NormalOneRTSource);
+    }
+
+    if (!PooledNormalTwoRT.IsValid())
+    {
+        // Only needs to be done once
+        // However, if you modify the render target asset, eg: change the resolution or pixel format, you may need to recreate the PooledNormalOneRT object
+        PooledNormalTwoRT = CreatePooledRenderTarget_RenderThread(NormalTwoRTSource);
     }
 
     const FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(GMaxRHIFeatureLevel);
@@ -38,11 +43,18 @@ void FComputeSceneViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& Gr
     constexpr bool bUseAsyncCompute = false;
     const bool bAsyncCompute = GSupportsEfficientAsyncCompute && (GNumExplicitGPUsForRendering == 1) && bUseAsyncCompute;
 
+    CalcNormalOnePass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
+    CalcNormalTwoPass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
+}
+
+void FComputeSceneViewExtension::CalcNormalOnePass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap,
+    const bool bAsyncCompute)
+{
     RDG_GPU_STAT_SCOPE(GraphBuilder, NormalCompute);
-    RDG_EVENT_SCOPE(GraphBuilder, "NormalCompute");
+    RDG_EVENT_SCOPE(GraphBuilder, "NormalCompute ONE");
 
     // Needs to be registered every frame
-    FRDGTextureRef RenderTargetTexture = GraphBuilder.RegisterExternalTexture(PooledRenderTarget, TEXT("Bound Render Target"));
+    FRDGTextureRef RenderTargetTexture = GraphBuilder.RegisterExternalTexture(PooledNormalOneRT, TEXT("Bound Render Target"));
 
     // Since we're rendering to the render target, we're going to use the full size of the render target rather than the screen
     const FIntRect RenderViewport = FIntRect(0, 0, RenderTargetTexture->Desc.Extent.X, RenderTargetTexture->Desc.Extent.Y);
@@ -51,10 +63,10 @@ void FComputeSceneViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& Gr
     FRDGTextureUAVDesc TempUAVDesc = FRDGTextureUAVDesc(TempTexture);
     FRDGTextureUAVRef TempUAV = GraphBuilder.CreateUAV(TempUAVDesc);
 
-    FNormalComputeCS::FParameters* Parameters = GraphBuilder.AllocParameters<FNormalComputeCS::FParameters>();
+    FNormalOneCS::FParameters* Parameters = GraphBuilder.AllocParameters<FNormalOneCS::FParameters>();
     Parameters->TextureSize = RenderTargetTexture->Desc.Extent;
     Parameters->SceneColorSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
-    Parameters->NormalSourceTexture = NormalSource->GetResource()->TextureRHI;
+    Parameters->NormalSourceTexture = NormalOneSource->GetResource()->TextureRHI;
     Parameters->OutputTexture = TempUAV;
 
     const FIntPoint ThreadCount = RenderViewport.Size();
@@ -63,27 +75,67 @@ void FComputeSceneViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& Gr
 
     const ERDGPassFlags PassFlags = bAsyncCompute ? ERDGPassFlags::AsyncCompute : ERDGPassFlags::Compute;
     FComputeShaderUtils::AddPass(GraphBuilder, RDG_EVENT_NAME("Normal Compute Pass %u", 1), PassFlags,
-        TShaderMapRef<FNormalComputeCS>(GlobalShaderMap), Parameters, GroupCount);
+        TShaderMapRef<FNormalOneCS>(GlobalShaderMap), Parameters, GroupCount);
+
+    AddCopyTexturePass(GraphBuilder, TempTexture, RenderTargetTexture);
+}
+
+void FComputeSceneViewExtension::CalcNormalTwoPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, bool bAsyncCompute)
+{
+    RDG_GPU_STAT_SCOPE(GraphBuilder, NormalCompute);
+    RDG_EVENT_SCOPE(GraphBuilder, "NormalCompute TWO");
+
+    // Needs to be registered every frame
+    FRDGTextureRef RenderTargetTexture = GraphBuilder.RegisterExternalTexture(PooledNormalTwoRT, TEXT("Bound Render Target"));
+
+    // Since we're rendering to the render target, we're going to use the full size of the render target rather than the screen
+    const FIntRect RenderViewport = FIntRect(0, 0, RenderTargetTexture->Desc.Extent.X, RenderTargetTexture->Desc.Extent.Y);
+
+    FRDGTextureRef TempTexture = GraphBuilder.CreateTexture(RenderTargetTexture->Desc, TEXT("Temp Texture"));
+    FRDGTextureUAVDesc TempUAVDesc = FRDGTextureUAVDesc(TempTexture);
+    FRDGTextureUAVRef TempUAV = GraphBuilder.CreateUAV(TempUAVDesc);
+
+    FNormalTwoCS::FParameters* Parameters = GraphBuilder.AllocParameters<FNormalTwoCS::FParameters>();
+    Parameters->TextureSize = RenderTargetTexture->Desc.Extent;
+    Parameters->SceneColorSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
+    Parameters->NormalSourceTexture = NormalTwoSource->GetResource()->TextureRHI;
+    Parameters->OutputTexture = TempUAV;
+
+    const FIntPoint ThreadCount = RenderViewport.Size();
+    const FIntVector GroupCount = FComputeShaderUtils::GetGroupCount(ThreadCount,
+        FIntPoint(NormalCompute::THREADS_X, NormalCompute::THREADS_Y));
+
+    const ERDGPassFlags PassFlags = bAsyncCompute ? ERDGPassFlags::AsyncCompute : ERDGPassFlags::Compute;
+    FComputeShaderUtils::AddPass(GraphBuilder, RDG_EVENT_NAME("Normal Compute Pass %u", 1), PassFlags,
+        TShaderMapRef<FNormalTwoCS>(GlobalShaderMap), Parameters, GroupCount);
 
     AddCopyTexturePass(GraphBuilder, TempTexture, RenderTargetTexture);
 }
 
 void FComputeSceneViewExtension::SetRenderTarget(UTextureRenderTarget2D* RenderTarget)
 {
-    RenderTargetSource = RenderTarget;
+    NormalOneRTSource = RenderTarget;
 }
 
 void FComputeSceneViewExtension::SetNormalOne(UTextureRenderTarget2D* RenderTarget)
 {
-    NormalSource = RenderTarget;
+    NormalOneSource = RenderTarget;
 }
 
-void FComputeSceneViewExtension::CreatePooledRenderTarget_RenderThread()
+void FComputeSceneViewExtension::SetNormalTwo(UTextureRenderTarget2D* RenderTarget)
 {
+    NormalTwoSource = RenderTarget;
+}
+
+TRefCountPtr<IPooledRenderTarget> FComputeSceneViewExtension::CreatePooledRenderTarget_RenderThread(UTextureRenderTarget2D* RenderTarget)
+{
+    TRefCountPtr<IPooledRenderTarget> Result = nullptr;
+
+    if (!RenderTarget) return Result;
     checkf(IsInRenderingThread() || IsInRHIThread(), TEXT("Cannot create from outside the rendering thread"));
 
     // Render target resources require the render thread
-    const FTextureRenderTargetResource* RenderTargetResource = RenderTargetSource->GetRenderTargetResource();
+    const FTextureRenderTargetResource* RenderTargetResource = RenderTarget->GetRenderTargetResource();
     if (RenderTargetResource == nullptr)
     {
         UE_LOG(LogTemp, Warning, TEXT("Render Target Resource is null"));
@@ -104,7 +156,8 @@ void FComputeSceneViewExtension::CreatePooledRenderTarget_RenderThread()
         RenderTargetRHI->GetDesc().Format, FClearValueBinding::Black, TexCreate_RenderTargetable | TexCreate_ShaderResource | TexCreate_UAV,
         TexCreate_None, false);
 
-    GRenderTargetPool.CreateUntrackedElement(RenderTargetDesc, PooledRenderTarget, RenderTargetItem);
+    GRenderTargetPool.CreateUntrackedElement(RenderTargetDesc, Result, RenderTargetItem);
 
     UE_LOG(LogTemp, Warning, TEXT("Created untracked Pooled Render Target resource"));
+    return Result;
 }

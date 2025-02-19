@@ -4,30 +4,18 @@
 #include "DataDrivenShaderPlatformInfo.h"
 #include "SceneTexturesConfig.h"
 #include "ShaderParameterStruct.h"
+#include "NormalOneCS.h"
 #include "RenderGraphUtils.h"
 
-namespace NormalCompute
-{
-    static constexpr int32 THREADS_X = 16;
-    static constexpr int32 THREADS_Y = 16;
-}
-
-BEGIN_SHADER_PARAMETER_STRUCT(FNormalComputeParams,)
-    // Texture type is same as set in shader - for getting the unlit colour
-    SHADER_PARAMETER(FVector2f, TextureSize)
-    SHADER_PARAMETER_SAMPLER(SamplerState, SceneColorSampler)
-    SHADER_PARAMETER_TEXTURE(Texture2D<float4>, NormalSourceTexture)
-    SHADER_PARAMETER_RDG_TEXTURE_UAV(Texture2D, OutputTexture)
-END_SHADER_PARAMETER_STRUCT()
 
 /**
  * Definition compute shader
  */
-class SHADERDIRECTORY_API FNormalComputeCS : public FGlobalShader
+class SHADERDIRECTORY_API FNormalTwoCS : public FGlobalShader
 {
-    DECLARE_EXPORTED_SHADER_TYPE(FNormalComputeCS, Global,);
+    DECLARE_EXPORTED_SHADER_TYPE(FNormalTwoCS, Global,);
     using FParameters = FNormalComputeParams;
-    SHADER_USE_PARAMETER_STRUCT(FNormalComputeCS, FGlobalShader);
+    SHADER_USE_PARAMETER_STRUCT(FNormalTwoCS, FGlobalShader);
 
     static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
     {

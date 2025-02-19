@@ -34,14 +34,22 @@ void URenderTargetSubsystem::Initialize(FSubsystemCollectionBase& Collection)
         UE_LOG(LogTexture, Error, TEXT("No Render Target for NormalTwo found"));
     }
 
-    if (const auto Normal = GetDefault<UGlintsSettings>()->NormalSource.LoadSynchronous())
-    {
-        
+    if (const auto Normal = GetDefault<UGlintsSettings>()->NormalOneSource.LoadSynchronous())
+    {        
         ComputeSceneViewExtension->SetNormalOne(Normal);
     }
     else
     {
-        UE_LOG(LogTexture, Error, TEXT("No Normal Source found"));
+        UE_LOG(LogTexture, Error, TEXT("No Normal Source ONE found"));
+    }
+
+    if (const auto Normal = GetDefault<UGlintsSettings>()->NormalTwoSource.LoadSynchronous())
+    {        
+        ComputeSceneViewExtension->SetNormalTwo(Normal);
+    }
+    else
+    {
+        UE_LOG(LogTexture, Error, TEXT("No Normal Source TWO found"));
     }
 }
 
