@@ -21,7 +21,7 @@ void FComputeSceneViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& Gr
 {
     FSceneViewExtensionBase::PrePostProcessPass_RenderThread(GraphBuilder, View, Inputs);
 
-    if (RenderTargetSource == nullptr)
+    if (RenderTargetSource == nullptr || NormalSource == nullptr)
     {
         return;
     }
@@ -33,8 +33,6 @@ void FComputeSceneViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& Gr
         CreatePooledRenderTarget_RenderThread();
     }
 
-    checkSlow(View.bIsViewInfo);
-    const FIntRect Viewport = static_cast<const FViewInfo&>(View).ViewRect;
     const FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(GMaxRHIFeatureLevel);
 
     constexpr bool bUseAsyncCompute = false;
@@ -42,8 +40,6 @@ void FComputeSceneViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& Gr
 
     RDG_GPU_STAT_SCOPE(GraphBuilder, NormalCompute);
     RDG_EVENT_SCOPE(GraphBuilder, "NormalCompute");
-
-    const FScreenPassTexture SceneColourTexture((*Inputs.SceneTextures)->SceneColorTexture, Viewport);
 
     // Needs to be registered every frame
     FRDGTextureRef RenderTargetTexture = GraphBuilder.RegisterExternalTexture(PooledRenderTarget, TEXT("Bound Render Target"));
@@ -58,7 +54,7 @@ void FComputeSceneViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& Gr
     FNormalComputeCS::FParameters* Parameters = GraphBuilder.AllocParameters<FNormalComputeCS::FParameters>();
     Parameters->TextureSize = RenderTargetTexture->Desc.Extent;
     Parameters->SceneColorSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
-    Parameters->SceneColorTexture = SceneColourTexture.Texture;
+    Parameters->NormalSourceTexture = NormalSource->GetResource()->TextureRHI;
     Parameters->OutputTexture = TempUAV;
 
     const FIntPoint ThreadCount = RenderViewport.Size();
@@ -77,9 +73,9 @@ void FComputeSceneViewExtension::SetRenderTarget(UTextureRenderTarget2D* RenderT
     RenderTargetSource = RenderTarget;
 }
 
-void FComputeSceneViewExtension::SetNormalOne(UTexture2D* RenderTarget)
+void FComputeSceneViewExtension::SetNormalOne(UTextureRenderTarget2D* RenderTarget)
 {
-    NormalOne = RenderTarget;
+    NormalSource = RenderTarget;
 }
 
 void FComputeSceneViewExtension::CreatePooledRenderTarget_RenderThread()

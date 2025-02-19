@@ -16,7 +16,7 @@ BEGIN_SHADER_PARAMETER_STRUCT(FNormalComputeParams,)
     // Texture type is same as set in shader - for getting the unlit colour
     SHADER_PARAMETER(FVector2f, TextureSize)
     SHADER_PARAMETER_SAMPLER(SamplerState, SceneColorSampler)
-    SHADER_PARAMETER_TEXTURE(Texture2D<float4>, SceneColorTexture)
+    SHADER_PARAMETER_TEXTURE(Texture2D<float4>, NormalSourceTexture)
     SHADER_PARAMETER_RDG_TEXTURE_UAV(Texture2D, OutputTexture)
 END_SHADER_PARAMETER_STRUCT()
 

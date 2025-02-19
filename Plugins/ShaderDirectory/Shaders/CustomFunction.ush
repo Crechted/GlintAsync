@@ -1,2 +1,6 @@
-float3 col = mul(A, B);
-return col;
+float2 GetTexelSize(Texture2D<float4> Texture)
+{
+    float2 TextureSize;
+    Texture.GetDimensions(TextureSize.x, TextureSize.y);
+    return 1.0 / TextureSize;
+}

@@ -19,4 +19,7 @@ public:
     
     UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "RenderTargets")
     TSoftObjectPtr<UTextureRenderTarget2D> NormalTwoRenderTarget;
+    
+    UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "RenderTargets")
+    TSoftObjectPtr<UTextureRenderTarget2D> NormalSource = nullptr;
 };

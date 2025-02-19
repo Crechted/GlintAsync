@@ -18,6 +18,8 @@ private:
     
     UPROPERTY()
     TObjectPtr<UTextureRenderTarget2D> RenderTargetNormalOne = nullptr;
+
+    UPROPERTY()
     TObjectPtr<UTextureRenderTarget2D> RenderTargetNormalTwo = nullptr;
 
 public:

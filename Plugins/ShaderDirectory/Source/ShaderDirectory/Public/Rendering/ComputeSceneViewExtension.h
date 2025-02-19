@@ -12,7 +12,7 @@ class SHADERDIRECTORY_API FComputeSceneViewExtension : public FSceneViewExtensio
 {
 private:
     TObjectPtr<UTextureRenderTarget2D> RenderTargetSource = nullptr;
-    TObjectPtr<UTexture2D> NormalOne = nullptr;
+    TObjectPtr<UTextureRenderTarget2D> NormalSource = nullptr;
     TRefCountPtr<IPooledRenderTarget> PooledRenderTarget;
     
 public:
@@ -30,7 +30,7 @@ public:
     virtual void PostRenderViewFamily_RenderThread(FRDGBuilder& GraphBuilder, FSceneViewFamily& InViewFamily) override {};
 
     void SetRenderTarget(UTextureRenderTarget2D* RenderTarget);
-    void SetNormalOne(UTexture2D* RenderTarget);
+    void SetNormalOne(UTextureRenderTarget2D* RenderTarget);
 private:
     void CreatePooledRenderTarget_RenderThread();
 };
