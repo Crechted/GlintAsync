@@ -13,11 +13,11 @@ namespace NormalCompute
 }
 
 BEGIN_SHADER_PARAMETER_STRUCT(FNormalComputeParams,)
-    SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float4>, SceneColorTexture)
-
-// Texture type is same as set in shader - for getting the unlit colour
-    SHADER_PARAMETER_STRUCT_REF(FViewUniformShaderParameters, View)
-    SHADER_PARAMETER_STRUCT_INCLUDE(FSceneTextureShaderParameters, SceneTextures)
+    // Texture type is same as set in shader - for getting the unlit colour
+    SHADER_PARAMETER(FVector2f, TextureSize)
+    SHADER_PARAMETER_SAMPLER(SamplerState, SceneColorSampler)
+    SHADER_PARAMETER_TEXTURE(Texture2D<float4>, SceneColorTexture)
+    SHADER_PARAMETER_RDG_TEXTURE_UAV(Texture2D, OutputTexture)
 END_SHADER_PARAMETER_STRUCT()
 
 /**
@@ -38,7 +38,7 @@ class SHADERDIRECTORY_API FNormalComputeCS : public FGlobalShader
                                              FShaderCompilerEnvironment& OutEnvironment)
     {
         FGlobalShader::ModifyCompilationEnvironment(Parameters, OutEnvironment);
-        
+
         OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
         // Can set Macro
         /*SET_SHADER_DEFINE(OutEnvironment, USE_UNLIT_SCENE_COLOUR, 1);

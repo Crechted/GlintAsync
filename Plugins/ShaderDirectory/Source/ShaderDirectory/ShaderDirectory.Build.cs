@@ -40,6 +40,7 @@ public class ShaderDirectory : ModuleRules
 				"Engine",
 				"Slate",
 				"SlateCore",
+				"DeveloperSettings",
                 "RenderCore", 
                 "Renderer"
 				// ... add private dependencies that you statically link with here ...	

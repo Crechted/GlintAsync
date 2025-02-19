@@ -5,16 +5,18 @@
 #include "CoreMinimal.h"
 #include "SceneViewExtension.h"
 
-class FRHIGPUBufferReadback;
 /**
  * 
  */
 class SHADERDIRECTORY_API FComputeSceneViewExtension : public FSceneViewExtensionBase
 {
-    FRHIGPUBufferReadback* Readback = nullptr;
+private:
+    TObjectPtr<UTextureRenderTarget2D> RenderTargetSource = nullptr;
+    TObjectPtr<UTexture2D> NormalOne = nullptr;
+    TRefCountPtr<IPooledRenderTarget> PooledRenderTarget;
+    
 public:
     FComputeSceneViewExtension(const FAutoRegister& AutoRegister);
-    virtual ~FComputeSceneViewExtension() override;
 
     virtual void SetupViewFamily(FSceneViewFamily& InViewFamily) override {};
     virtual void SetupView(FSceneViewFamily& InViewFamily, FSceneView& InView) override {};
@@ -26,4 +28,9 @@ public:
     virtual void PostRenderView_RenderThread(FRDGBuilder& GraphBuilder, FSceneView& InView) override {};
     virtual void PrePostProcessPass_RenderThread(FRDGBuilder& GraphBuilder, const FSceneView& View, const FPostProcessingInputs& Inputs) override;
     virtual void PostRenderViewFamily_RenderThread(FRDGBuilder& GraphBuilder, FSceneViewFamily& InViewFamily) override {};
+
+    void SetRenderTarget(UTextureRenderTarget2D* RenderTarget);
+    void SetNormalOne(UTexture2D* RenderTarget);
+private:
+    void CreatePooledRenderTarget_RenderThread();
 };

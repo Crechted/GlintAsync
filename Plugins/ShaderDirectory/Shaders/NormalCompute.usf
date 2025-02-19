@@ -1,12 +1,23 @@
 #include "/Engine/Private/Common.ush"
 #include "/Engine/Private/DeferredShadingCommon.ush"
 
-RWTexture2D<float4> SceneColorTexture;
+SamplerState SceneColorSampler;
+
+float2 TextureSize;
+
+Texture2D<float4> SceneColorTexture;
+
+RWTexture2D<float4> OutputTexture;
 
 [numthreads(THREADS_X, THREADS_Y, 1)]
 void NormalACS(uint3 DispatchThreadID : SV_DispatchThreadID, uint3 GroupThreadID : SV_GroupThreadID)
 {
-    const float4 SceneColour = SceneColorTexture[DispatchThreadID.xy];
-    float3 SceneColourOut = SceneColour.rgb;
-    SceneColorTexture[DispatchThreadID.xy] = saturate(float4(SceneColourOut.b, SceneColourOut.g, SceneColourOut.r, SceneColour.a));
+    const float2 UV = DispatchThreadID.xy / TextureSize;
+    const float4 SceneColour = SceneColorTexture.SampleLevel(SceneColorSampler, UV, 0);
+    OutputTexture[DispatchThreadID.xy] = saturate(SceneColour);
+
+    /*const float2 UV = DispatchThreadID.xy;// / TextureSize;
+    const float4 SceneColour = SceneColorTexture[UV.xy];
+    OutputTexture[DispatchThreadID.xy] = saturate(SceneColour);*/
+    
 }
