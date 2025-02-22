@@ -17,25 +17,23 @@ FComputeSceneViewExtension::FComputeSceneViewExtension(const FAutoRegister& Auto
 {
 }
 
-void FComputeSceneViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& GraphBuilder, const FSceneView& View,
-    const FPostProcessingInputs& Inputs)
+inline void FComputeSceneViewExtension::PreRenderView_RenderThread(FRDGBuilder& GraphBuilder, FSceneView& InView)
 {
-    FSceneViewExtensionBase::PrePostProcessPass_RenderThread(GraphBuilder, View, Inputs);
-
-    if (!NormalOneRTSource || !NormalTwoRTSource || !NormalOneSource) return;
+    FSceneViewExtensionBase::PreRenderView_RenderThread(GraphBuilder, InView);
+    if (!NormalOneRT || !NormalTwoRT || !NormalOneSource) return;
 
     if (!PooledNormalOneRT.IsValid())
     {
         // Only needs to be done once
         // However, if you modify the render target asset, eg: change the resolution or pixel format, you may need to recreate the PooledNormalOneRT object
-        PooledNormalOneRT = CreatePooledRenderTarget_RenderThread(NormalOneRTSource);
+        PooledNormalOneRT = CreatePooledRenderTarget_RenderThread(NormalOneRT);
     }
 
     if (!PooledNormalTwoRT.IsValid())
     {
         // Only needs to be done once
         // However, if you modify the render target asset, eg: change the resolution or pixel format, you may need to recreate the PooledNormalOneRT object
-        PooledNormalTwoRT = CreatePooledRenderTarget_RenderThread(NormalTwoRTSource);
+        PooledNormalTwoRT = CreatePooledRenderTarget_RenderThread(NormalTwoRT);
     }
 
     const FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(GMaxRHIFeatureLevel);
@@ -44,7 +42,7 @@ void FComputeSceneViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& Gr
     const bool bAsyncCompute = GSupportsEfficientAsyncCompute && (GNumExplicitGPUsForRendering == 1) && bUseAsyncCompute;
 
     CalcNormalOnePass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
-    CalcNormalTwoPass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
+    //CalcNormalTwoPass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
 }
 
 void FComputeSceneViewExtension::CalcNormalOnePass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap,
@@ -71,7 +69,7 @@ void FComputeSceneViewExtension::CalcNormalOnePass(FRDGBuilder& GraphBuilder, co
 
     const FIntPoint ThreadCount = RenderViewport.Size();
     const FIntVector GroupCount = FComputeShaderUtils::GetGroupCount(ThreadCount,
-        FIntPoint(NormalCompute::THREADS_X, NormalCompute::THREADS_Y));
+        FIntPoint(NormalOneCompute::THREADS_X, NormalOneCompute::THREADS_Y));
 
     const ERDGPassFlags PassFlags = bAsyncCompute ? ERDGPassFlags::AsyncCompute : ERDGPassFlags::Compute;
     FComputeShaderUtils::AddPass(GraphBuilder, RDG_EVENT_NAME("Normal Compute Pass %u", 1), PassFlags,
@@ -98,12 +96,12 @@ void FComputeSceneViewExtension::CalcNormalTwoPass(FRDGBuilder& GraphBuilder, co
     FNormalTwoCS::FParameters* Parameters = GraphBuilder.AllocParameters<FNormalTwoCS::FParameters>();
     Parameters->TextureSize = RenderTargetTexture->Desc.Extent;
     Parameters->SceneColorSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
-    Parameters->NormalSourceTexture = NormalTwoSource->GetResource()->TextureRHI;
+    Parameters->NormalSourceTexture = NormalOneRT->GetResource()->TextureRHI;
     Parameters->OutputTexture = TempUAV;
 
     const FIntPoint ThreadCount = RenderViewport.Size();
     const FIntVector GroupCount = FComputeShaderUtils::GetGroupCount(ThreadCount,
-        FIntPoint(NormalCompute::THREADS_X, NormalCompute::THREADS_Y));
+        FIntPoint(NormalTwoCompute::THREADS_X, NormalTwoCompute::THREADS_Y));
 
     const ERDGPassFlags PassFlags = bAsyncCompute ? ERDGPassFlags::AsyncCompute : ERDGPassFlags::Compute;
     FComputeShaderUtils::AddPass(GraphBuilder, RDG_EVENT_NAME("Normal Compute Pass %u", 1), PassFlags,
@@ -114,7 +112,7 @@ void FComputeSceneViewExtension::CalcNormalTwoPass(FRDGBuilder& GraphBuilder, co
 
 void FComputeSceneViewExtension::SetRenderTarget(UTextureRenderTarget2D* RenderTarget)
 {
-    NormalOneRTSource = RenderTarget;
+    NormalOneRT = RenderTarget;
 }
 
 void FComputeSceneViewExtension::SetNormalOne(UTextureRenderTarget2D* RenderTarget)
@@ -124,7 +122,7 @@ void FComputeSceneViewExtension::SetNormalOne(UTextureRenderTarget2D* RenderTarg
 
 void FComputeSceneViewExtension::SetNormalTwo(UTextureRenderTarget2D* RenderTarget)
 {
-    NormalTwoSource = RenderTarget;
+    //NormalTwoSource = RenderTarget;
 }
 
 TRefCountPtr<IPooledRenderTarget> FComputeSceneViewExtension::CreatePooledRenderTarget_RenderThread(UTextureRenderTarget2D* RenderTarget)

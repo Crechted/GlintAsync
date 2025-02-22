@@ -9,14 +9,14 @@
 class SHADERDIRECTORY_API FComputeSceneViewExtension : public FSceneViewExtensionBase
 {
 private:
-    TObjectPtr<UTextureRenderTarget2D> NormalOneRTSource = nullptr;
-    TObjectPtr<UTextureRenderTarget2D> NormalTwoRTSource = nullptr;
+    TObjectPtr<UTextureRenderTarget2D> NormalOneRT = nullptr;
+    TObjectPtr<UTextureRenderTarget2D> NormalTwoRT = nullptr;
 
     TRefCountPtr<IPooledRenderTarget> PooledNormalOneRT;
     TRefCountPtr<IPooledRenderTarget> PooledNormalTwoRT;
 
     TObjectPtr<UTextureRenderTarget2D> NormalOneSource = nullptr;
-    TObjectPtr<UTextureRenderTarget2D> NormalTwoSource = nullptr;
+    //TObjectPtr<UTextureRenderTarget2D> NormalTwoSource = nullptr;
 
 public:
     FComputeSceneViewExtension(const FAutoRegister& AutoRegister);
@@ -42,15 +42,16 @@ public:
     {
     };
 
-    virtual void PreRenderView_RenderThread(FRDGBuilder& GraphBuilder, FSceneView& InView) override
-    {
-    };
+    virtual void PreRenderView_RenderThread(FRDGBuilder& GraphBuilder, FSceneView& InView) override;
 
     virtual void PostRenderView_RenderThread(FRDGBuilder& GraphBuilder, FSceneView& InView) override
     {
     };
+
     virtual void PrePostProcessPass_RenderThread(FRDGBuilder& GraphBuilder, const FSceneView& View,
-        const FPostProcessingInputs& Inputs) override;
+        const FPostProcessingInputs& Inputs) override
+    {
+    }
 
     virtual void PostRenderViewFamily_RenderThread(FRDGBuilder& GraphBuilder, FSceneViewFamily& InViewFamily) override
     {

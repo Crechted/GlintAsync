@@ -45,24 +45,3 @@ void NormalOneCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint3 GroupThread
     float4 Emissive = float4(float2(Local12, Local19), 0.0f, 1.0f);
     OutputTexture[DispatchThreadID.xy] = saturate(Emissive);
 }
-
-[numthreads(THREADS_X, THREADS_Y, 1)]
-void NormalTwoCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint3 GroupThreadID : SV_GroupThreadID)
-{
-    /*const float2 UV = DispatchThreadID.xy / TextureSize;
-    const float4 SceneColour = NormalSourceTexture.SampleLevel(SceneColorSampler, UV, 0);
-    OutputTexture[DispatchThreadID.xy] = saturate(SceneColour);*/
-
-    const float2 UV = DispatchThreadID.xy / TextureSize;
-
-    float4 Normal = NormalSourceTexture.SampleLevel(SceneColorSampler, UV, 0);
-
-    float Local4 = PositiveClampedPow(Normal.r, 2.0f);
-    float Local5 = PositiveClampedPow(Normal.g, 2.0f);
-    float Local6 = (Normal.r * Normal.g);
-
-    //float3 Local7 = lerp(float3(float2(Local4,Local5),Local6),Material.PreshaderBuffer[1].yzw,Material.PreshaderBuffer[1].x);
-    //PixelMaterialInputs.EmissiveColor = Local7;
-    float4 Emissive = float4(float3(Local4, Local5, Local6), 1.0f);
-    OutputTexture[DispatchThreadID.xy] = saturate(Emissive);
-}
