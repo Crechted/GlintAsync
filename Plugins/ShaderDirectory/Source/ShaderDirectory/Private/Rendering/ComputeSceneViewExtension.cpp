@@ -42,7 +42,7 @@ inline void FComputeSceneViewExtension::PreRenderView_RenderThread(FRDGBuilder& 
     const bool bAsyncCompute = GSupportsEfficientAsyncCompute && (GNumExplicitGPUsForRendering == 1) && bUseAsyncCompute;
 
     CalcNormalOnePass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
-    //CalcNormalTwoPass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
+    CalcNormalTwoPass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
 }
 
 void FComputeSceneViewExtension::CalcNormalOnePass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap,
@@ -110,9 +110,14 @@ void FComputeSceneViewExtension::CalcNormalTwoPass(FRDGBuilder& GraphBuilder, co
     AddCopyTexturePass(GraphBuilder, TempTexture, RenderTargetTexture);
 }
 
-void FComputeSceneViewExtension::SetRenderTarget(UTextureRenderTarget2D* RenderTarget)
-{
+void FComputeSceneViewExtension::SetOneRenderTarget(UTextureRenderTarget2D* RenderTarget)
+{   
     NormalOneRT = RenderTarget;
+}
+
+void FComputeSceneViewExtension::SetTwoRenderTarget(UTextureRenderTarget2D* RenderTarget)
+{
+    NormalTwoRT = RenderTarget;
 }
 
 void FComputeSceneViewExtension::SetNormalOne(UTextureRenderTarget2D* RenderTarget)

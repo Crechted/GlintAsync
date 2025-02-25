@@ -17,7 +17,7 @@ void URenderTargetSubsystem::Initialize(FSubsystemCollectionBase& Collection)
     RenderTargetNormalOne = GetDefault<UGlintsSettings>()->NormalOneRenderTarget.LoadSynchronous();
     if (RenderTargetNormalOne)
     {
-        ComputeSceneViewExtension->SetRenderTarget(RenderTargetNormalOne);
+        ComputeSceneViewExtension->SetOneRenderTarget(RenderTargetNormalOne);
     }
     else
     {
@@ -27,7 +27,7 @@ void URenderTargetSubsystem::Initialize(FSubsystemCollectionBase& Collection)
     RenderTargetNormalTwo = GetDefault<UGlintsSettings>()->NormalTwoRenderTarget.LoadSynchronous();
     if (RenderTargetNormalTwo)
     {
-        //ComputeSceneViewExtension->SetRenderTarget(RenderTargetNormalTwo);
+        ComputeSceneViewExtension->SetTwoRenderTarget(RenderTargetNormalTwo);
     }
     else
     {

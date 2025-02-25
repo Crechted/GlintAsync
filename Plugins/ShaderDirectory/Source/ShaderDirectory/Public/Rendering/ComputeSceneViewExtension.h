@@ -46,7 +46,7 @@ public:
 
     virtual void PostRenderView_RenderThread(FRDGBuilder& GraphBuilder, FSceneView& InView) override
     {
-    };
+    }
 
     virtual void PrePostProcessPass_RenderThread(FRDGBuilder& GraphBuilder, const FSceneView& View,
         const FPostProcessingInputs& Inputs) override
@@ -57,7 +57,8 @@ public:
     {
     };
 
-    void SetRenderTarget(UTextureRenderTarget2D* RenderTarget);
+    void SetOneRenderTarget(UTextureRenderTarget2D* RenderTarget);
+    void SetTwoRenderTarget(UTextureRenderTarget2D* RenderTarget);
     void SetNormalOne(UTextureRenderTarget2D* RenderTarget);
     void SetNormalTwo(UTextureRenderTarget2D* RenderTarget);
 
