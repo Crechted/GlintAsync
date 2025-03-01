@@ -72,7 +72,7 @@ void FComputeSceneViewExtension::CalcNormalOnePass(FRDGBuilder& GraphBuilder, co
         FIntPoint(NormalOneCompute::THREADS_X, NormalOneCompute::THREADS_Y));
 
     const ERDGPassFlags PassFlags = bAsyncCompute ? ERDGPassFlags::AsyncCompute : ERDGPassFlags::Compute;
-    FComputeShaderUtils::AddPass(GraphBuilder, RDG_EVENT_NAME("Normal Compute Pass %u", 1), PassFlags,
+    FComputeShaderUtils::AddPass(GraphBuilder, RDG_EVENT_NAME("Normal Compute Pass %u", 2), PassFlags,
         TShaderMapRef<FNormalOneCS>(GlobalShaderMap), Parameters, GroupCount);
 
     AddCopyTexturePass(GraphBuilder, TempTexture, RenderTargetTexture);
