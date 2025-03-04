@@ -22,6 +22,9 @@ private:
     UPROPERTY()
     TObjectPtr<UTextureRenderTarget2D> RenderTargetNormalTwo = nullptr;
 
+    UPROPERTY()
+    TObjectPtr<UTextureRenderTarget2D> RenderTargetGlintParameters = nullptr;
+
 public:
     virtual void Initialize(FSubsystemCollectionBase& Collection) override;
     virtual void Deinitialize() override;

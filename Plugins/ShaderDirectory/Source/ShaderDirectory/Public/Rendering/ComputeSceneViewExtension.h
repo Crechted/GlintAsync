@@ -11,11 +11,13 @@ class SHADERDIRECTORY_API FComputeSceneViewExtension : public FSceneViewExtensio
 private:
     TObjectPtr<UTextureRenderTarget2D> NormalOneRT = nullptr;
     TObjectPtr<UTextureRenderTarget2D> NormalTwoRT = nullptr;
+    TObjectPtr<UTextureRenderTarget2D> GlintParametersRT = nullptr;
 
     TRefCountPtr<IPooledRenderTarget> PooledNormalOneRT;
     TRefCountPtr<IPooledRenderTarget> PooledNormalTwoRT;
+    TRefCountPtr<IPooledRenderTarget> PooledGlintParametersRT;
 
-    TObjectPtr<UTextureRenderTarget2D> NormalOneSource = nullptr;
+    TObjectPtr<UTextureRenderTarget2D> NormalSource = nullptr;
     //TObjectPtr<UTextureRenderTarget2D> NormalTwoSource = nullptr;
 
 public:
@@ -59,11 +61,12 @@ public:
 
     void SetOneRenderTarget(UTextureRenderTarget2D* RenderTarget);
     void SetTwoRenderTarget(UTextureRenderTarget2D* RenderTarget);
-    void SetNormalOne(UTextureRenderTarget2D* RenderTarget);
-    void SetNormalTwo(UTextureRenderTarget2D* RenderTarget);
+    void SetGlintParametersTarget(UTextureRenderTarget2D* RenderTarget);
+    void SetNormalSource(UTextureRenderTarget2D* RenderTarget);
 
 private:
     void CalcNormalOnePass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, bool bAsyncCompute);
     void CalcNormalTwoPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, bool bAsyncCompute);
+    void CalcGlintParametersPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, bool bAsyncCompute);
     TRefCountPtr<IPooledRenderTarget> CreatePooledRenderTarget_RenderThread(UTextureRenderTarget2D* RenderTarget);
 };

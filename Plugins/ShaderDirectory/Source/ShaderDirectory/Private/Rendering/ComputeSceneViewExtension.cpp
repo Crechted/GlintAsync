@@ -9,6 +9,8 @@
 
 #include "RenderGraphUtils.h"
 #include "PostProcess/PostProcessing.h"
+#include "ShaderDirectory/GlintsSettings.h"
+#include "ShaderPasses/GlintParametersCS.h"
 #include "ShaderPasses/NormalTwoCS.h"
 
 DECLARE_GPU_DRAWCALL_STAT(NormalCompute); // Unreal Insights
@@ -20,7 +22,7 @@ FComputeSceneViewExtension::FComputeSceneViewExtension(const FAutoRegister& Auto
 inline void FComputeSceneViewExtension::PreRenderView_RenderThread(FRDGBuilder& GraphBuilder, FSceneView& InView)
 {
     FSceneViewExtensionBase::PreRenderView_RenderThread(GraphBuilder, InView);
-    if (!NormalOneRT || !NormalTwoRT || !NormalOneSource) return;
+    if (!NormalOneRT || !NormalTwoRT || !NormalSource) return;
 
     if (!PooledNormalOneRT.IsValid())
     {
@@ -36,20 +38,26 @@ inline void FComputeSceneViewExtension::PreRenderView_RenderThread(FRDGBuilder& 
         PooledNormalTwoRT = CreatePooledRenderTarget_RenderThread(NormalTwoRT);
     }
 
+    if (!PooledGlintParametersRT.IsValid())
+    {
+        PooledGlintParametersRT = CreatePooledRenderTarget_RenderThread(GlintParametersRT);
+    }
+
     const FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(GMaxRHIFeatureLevel);
 
-    constexpr bool bUseAsyncCompute = false;
-    const bool bAsyncCompute = GSupportsEfficientAsyncCompute && (GNumExplicitGPUsForRendering == 1) && bUseAsyncCompute;
+    constexpr bool bUseAsyncCompute = true;
+    const bool bAsyncCompute = /*GSupportsEfficientAsyncCompute &&*/ (GNumExplicitGPUsForRendering == 1) && bUseAsyncCompute;
 
     CalcNormalOnePass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
     CalcNormalTwoPass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
+    CalcGlintParametersPass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
 }
 
 void FComputeSceneViewExtension::CalcNormalOnePass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap,
     const bool bAsyncCompute)
 {
     RDG_GPU_STAT_SCOPE(GraphBuilder, NormalCompute);
-    RDG_EVENT_SCOPE(GraphBuilder, "NormalCompute ONE");
+    RDG_EVENT_SCOPE(GraphBuilder, "GlintCompute ONE");
 
     // Needs to be registered every frame
     FRDGTextureRef RenderTargetTexture = GraphBuilder.RegisterExternalTexture(PooledNormalOneRT, TEXT("Bound Render Target"));
@@ -64,7 +72,7 @@ void FComputeSceneViewExtension::CalcNormalOnePass(FRDGBuilder& GraphBuilder, co
     FNormalOneCS::FParameters* Parameters = GraphBuilder.AllocParameters<FNormalOneCS::FParameters>();
     Parameters->TextureSize = RenderTargetTexture->Desc.Extent;
     Parameters->SceneColorSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
-    Parameters->NormalSourceTexture = NormalOneSource->GetResource()->TextureRHI;
+    Parameters->NormalSourceTexture = NormalSource->GetResource()->TextureRHI;
     Parameters->OutputTexture = TempUAV;
 
     const FIntPoint ThreadCount = RenderViewport.Size();
@@ -81,7 +89,7 @@ void FComputeSceneViewExtension::CalcNormalOnePass(FRDGBuilder& GraphBuilder, co
 void FComputeSceneViewExtension::CalcNormalTwoPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, bool bAsyncCompute)
 {
     RDG_GPU_STAT_SCOPE(GraphBuilder, NormalCompute);
-    RDG_EVENT_SCOPE(GraphBuilder, "NormalCompute TWO");
+    RDG_EVENT_SCOPE(GraphBuilder, "GlintCompute TWO");
 
     // Needs to be registered every frame
     FRDGTextureRef RenderTargetTexture = GraphBuilder.RegisterExternalTexture(PooledNormalTwoRT, TEXT("Bound Render Target"));
@@ -110,8 +118,43 @@ void FComputeSceneViewExtension::CalcNormalTwoPass(FRDGBuilder& GraphBuilder, co
     AddCopyTexturePass(GraphBuilder, TempTexture, RenderTargetTexture);
 }
 
+void FComputeSceneViewExtension::CalcGlintParametersPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap,
+    bool bAsyncCompute)
+{
+    RDG_GPU_STAT_SCOPE(GraphBuilder, NormalCompute);
+    RDG_EVENT_SCOPE(GraphBuilder, "GlintCompute THREE");
+
+    // Needs to be registered every frame
+    FRDGTextureRef RenderTargetTexture = GraphBuilder.RegisterExternalTexture(PooledGlintParametersRT, TEXT("Bound Render Target"));
+
+    // Since we're rendering to the render target, we're going to use the full size of the render target rather than the screen
+    const FIntRect RenderViewport = FIntRect(0, 0, RenderTargetTexture->Desc.Extent.X, RenderTargetTexture->Desc.Extent.Y);
+
+    FRDGTextureRef TempTexture = GraphBuilder.CreateTexture(RenderTargetTexture->Desc, TEXT("Temp Texture"));
+    FRDGTextureUAVDesc TempUAVDesc = FRDGTextureUAVDesc(TempTexture);
+    FRDGTextureUAVRef TempUAV = GraphBuilder.CreateUAV(TempUAVDesc);
+
+    FGlintParametersCS::FParameters* Parameters = GraphBuilder.AllocParameters<FGlintParametersCS::FParameters>();
+    Parameters->TextureSize = RenderTargetTexture->Desc.Extent;
+    Parameters->SceneColorSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
+    Parameters->SigmasRho = GetDefault<UGlintsSettings>()->SigmasRho;
+    Parameters->NormalTexture1 = NormalOneRT->GetResource()->TextureRHI;
+    Parameters->NormalTexture2 = NormalTwoRT->GetResource()->TextureRHI;
+    Parameters->GlintParametersTexture = TempUAV;
+
+    const FIntPoint ThreadCount = RenderViewport.Size();
+    const FIntVector GroupCount = FComputeShaderUtils::GetGroupCount(ThreadCount,
+        FIntPoint(GlintParametersCompute::THREADS_X, GlintParametersCompute::THREADS_Y));
+
+    const ERDGPassFlags PassFlags = bAsyncCompute ? ERDGPassFlags::AsyncCompute : ERDGPassFlags::Compute;
+    FComputeShaderUtils::AddPass(GraphBuilder, RDG_EVENT_NAME("Glint Parameters Pass %u", 1), PassFlags,
+        TShaderMapRef<FGlintParametersCS>(GlobalShaderMap), Parameters, GroupCount);
+
+    AddCopyTexturePass(GraphBuilder, TempTexture, RenderTargetTexture);
+}
+
 void FComputeSceneViewExtension::SetOneRenderTarget(UTextureRenderTarget2D* RenderTarget)
-{   
+{
     NormalOneRT = RenderTarget;
 }
 
@@ -120,14 +163,14 @@ void FComputeSceneViewExtension::SetTwoRenderTarget(UTextureRenderTarget2D* Rend
     NormalTwoRT = RenderTarget;
 }
 
-void FComputeSceneViewExtension::SetNormalOne(UTextureRenderTarget2D* RenderTarget)
+void FComputeSceneViewExtension::SetGlintParametersTarget(UTextureRenderTarget2D* RenderTarget)
 {
-    NormalOneSource = RenderTarget;
+    GlintParametersRT = RenderTarget;
 }
 
-void FComputeSceneViewExtension::SetNormalTwo(UTextureRenderTarget2D* RenderTarget)
+void FComputeSceneViewExtension::SetNormalSource(UTextureRenderTarget2D* RenderTarget)
 {
-    //NormalTwoSource = RenderTarget;
+    NormalSource = RenderTarget;
 }
 
 TRefCountPtr<IPooledRenderTarget> FComputeSceneViewExtension::CreatePooledRenderTarget_RenderThread(UTextureRenderTarget2D* RenderTarget)

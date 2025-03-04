@@ -21,8 +21,11 @@ public:
     TSoftObjectPtr<UTextureRenderTarget2D> NormalTwoRenderTarget;
     
     UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "RenderTargets")
-    TSoftObjectPtr<UTextureRenderTarget2D> NormalOneSource = nullptr;
+    TSoftObjectPtr<UTextureRenderTarget2D> NormalSource = nullptr;
     
     UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "RenderTargets")
-    TSoftObjectPtr<UTextureRenderTarget2D> NormalTwoSource = nullptr;
+    TSoftObjectPtr<UTextureRenderTarget2D> GlintParametersTarget = nullptr;
+    
+    UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Parameters")
+    FVector3f SigmasRho;
 };

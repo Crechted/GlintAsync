@@ -66,6 +66,7 @@ SamplerState SceneColorSampler;
 
 Texture2D NormalTexture1;
 Texture2D NormalTexture2;
+Texture2D GlintParamsTexture;
 float3 LightVector;
 float2 TextureSize;
 float3 SigmasRho;
@@ -77,15 +78,15 @@ float3 CameraVector;
 RWTexture2D<float3> GlintsResultTexture;
 
 [numthreads(THREADS_X, THREADS_Y, 1)]
-void AccumulateGlintyWaterModelCompute(uint3 DispatchThreadID : SV_DispatchThreadID, uint3 GroupThreadID : SV_GroupThreadID)
+void AccumulateGlintWaterModelCompute(uint3 DispatchThreadID : SV_DispatchThreadID, uint3 GroupThreadID : SV_GroupThreadID)
 {
     const float3x3 WorldToTangent = make_tbn(WorldNormal);
     
-	const float3 N = WorldNormal;
+	//const float3 N = WorldNormal;
 	const float3 V = CameraVector;
     const float3 L = LightVector.xyz;
 
-    const float3 wg = float3(0.0f, 0.0f, 1.0f); //normalize(mul(N, WorldToTangent));
+    //const float3 wg = float3(0.0f, 0.0f, 1.0f); //normalize(mul(N, WorldToTangent));
     const float3 wo = normalize(mul(V, WorldToTangent));
     const float3 wi = normalize(mul(L, WorldToTangent));
 
@@ -94,45 +95,15 @@ void AccumulateGlintyWaterModelCompute(uint3 DispatchThreadID : SV_DispatchThrea
 	float2 GlintUV = DispatchThreadID.xy / TextureSize;
 
     float2 Normals1 = NormalTexture1.SampleLevel(SceneColorSampler, GlintUV, 0).xy;
-    float3 Normals2 = NormalTexture2.SampleLevel(SceneColorSampler, GlintUV, 0).xyz;
+    float3 GlintParams = GlintParamsTexture.SampleLevel(SceneColorSampler, GlintUV, 0).xyz;
     
-    //float3 SigmasRho = GetGlintyWaterParams3(MaterialParams);
-    float sigma_x_mat = SigmasRho.x;
-    float sigma_y_mat = SigmasRho.y;
-    float rho_mat = SigmasRho.z;
-    //float density = GetGlintyWaterParams5(MaterialParams);
+    SurfaceColor = DiffuseColor + EmissiveColor;
+	
+    float density = GetGlintyWaterParams5(MaterialParams);
 
-    //float sigma_x, sigma_y, rho;
-
-    float normal_map_std_slope_x_sqr = Normals2.x - Normals1.x * Normals1.x;
-    float normal_map_std_slope_y_sqr = Normals2.y - Normals1.y * Normals1.y;
-
-    normal_map_std_slope_x_sqr = clamp(normal_map_std_slope_x_sqr, 0.0001, 1.);
-    normal_map_std_slope_y_sqr = clamp(normal_map_std_slope_y_sqr, 0.0001, 1.);
-
-    float sigma_x_normals = sqrt(normal_map_std_slope_x_sqr);
-    float sigma_y_normals = sqrt(normal_map_std_slope_y_sqr);
-
-    float rho_normals = Normals2.z - Normals1.x * Normals1.y;
-    if(normal_map_std_slope_x_sqr == 0.0001 ||  normal_map_std_slope_y_sqr == 0.0001)
-    {
-        sigma_x_normals = 0.;
-        sigma_y_normals = 0.;
-        rho_normals = 0.;
-    }
-    else
-    {
-        rho_normals /= sigma_x_normals * sigma_y_normals;
-        rho_normals = clamp(rho_normals, -0.99, 0.99);
-    }
-
-    float sigma_x = sqrt(sigma_x_mat*sigma_x_mat + sigma_x_normals*sigma_x_normals);
-    float sigma_y = sqrt(sigma_y_mat*sigma_y_mat + sigma_y_normals*sigma_y_normals);
-    float rho = (rho_mat * sigma_x_mat * sigma_y_mat + rho_normals * sigma_x_normals * sigma_y_normals) / (sigma_x * sigma_y) ;
-
-    sigma_x = clamp(sigma_x, 0.01f, 1.f);
-    sigma_y = clamp(sigma_y, 0.01f, 1.f);
-    rho = clamp(rho, -0.99f, 0.99f);
+    float sigma_x = GlintParams.x;
+    float sigma_y = GlintParams.y;
+    float rho = GlintParams.z;
     float3 wn = float3(-Normals1.x, -Normals1.y, 1.) / sqrt(1 + Normals1.x * Normals1.x + Normals1.y * Normals1.y);
     
     float D = f_P(wo, wi, float3(sigma_x, sigma_y, rho), density, GlintUV, ddx(GlintUV), ddy(GlintUV), false);
