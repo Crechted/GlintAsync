@@ -12,6 +12,7 @@
 #include "ShaderDirectory/GlintsSettings.h"
 #include "ShaderPasses/GlintParametersCS.h"
 #include "ShaderPasses/NormalTwoCS.h"
+#include "ShaderPasses/SceneTextureCS.h"
 
 DECLARE_GPU_DRAWCALL_STAT(NormalCompute); // Unreal Insights
 
@@ -19,10 +20,27 @@ FComputeSceneViewExtension::FComputeSceneViewExtension(const FAutoRegister& Auto
 {
 }
 
+void FComputeSceneViewExtension::BeginRenderViewFamily(FSceneViewFamily& InViewFamily)
+{
+    if (!OutputSomeTextureRT) return;
+
+    FVector2D ViewportSize = FVector2D(OutputSomeTextureRT->SizeX, OutputSomeTextureRT->SizeY);
+    if (GEngine && GEngine->GameViewport)
+    {
+        GEngine->GameViewport->GetViewportSize(ViewportSize);
+    }
+
+    if (!(ViewportSize.X == OutputSomeTextureRT->SizeX && ViewportSize.Y == OutputSomeTextureRT->SizeY))
+    {
+        if (PooledSomeTexturesRT.IsValid()) PooledSomeTexturesRT.SafeRelease();
+        OutputSomeTextureRT->ResizeTarget(ViewportSize.X, ViewportSize.Y);
+    }
+}
+
 inline void FComputeSceneViewExtension::PreRenderView_RenderThread(FRDGBuilder& GraphBuilder, FSceneView& InView)
 {
     FSceneViewExtensionBase::PreRenderView_RenderThread(GraphBuilder, InView);
-    if (!NormalOneRT || !NormalTwoRT || !NormalSource) return;
+    if (!NormalOneRT || !NormalTwoRT || !NormalSource || !NormalSource->GetResource()) return;
 
     if (!PooledNormalOneRT.IsValid())
     {
@@ -53,6 +71,67 @@ inline void FComputeSceneViewExtension::PreRenderView_RenderThread(FRDGBuilder& 
     CalcGlintParametersPass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
 }
 
+void FComputeSceneViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& GraphBuilder, const FSceneView& View,
+    const FPostProcessingInputs& Inputs)
+{
+    FSceneViewExtensionBase::PrePostProcessPass_RenderThread(GraphBuilder, View, Inputs);
+
+    if (!OutputSomeTextureRT) return;
+
+    if (!PooledSomeTexturesRT.IsValid())
+    {
+        PooledSomeTexturesRT = CreatePooledRenderTarget_RenderThread(OutputSomeTextureRT);
+    }
+
+    FSceneTextureShaderParameters SceneTextureShaderParameters = CreateSceneTextureShaderParameters(GraphBuilder, View,
+        ESceneTextureSetupMode::All);
+
+    RDG_GPU_STAT_SCOPE(GraphBuilder, NormalCompute);
+    RDG_EVENT_SCOPE(GraphBuilder, "SceneTextureCompute FOUR");
+
+    // Needs to be registered every frame
+    FRDGTextureRef RenderTargetTexture = GraphBuilder.RegisterExternalTexture(PooledSomeTexturesRT, TEXT("Bound Render Target"));
+
+    // Since we're rendering to the render target, we're going to use the full size of the render target rather than the screen
+    const FIntRect RenderViewport = FIntRect(0, 0, RenderTargetTexture->Desc.Extent.X, RenderTargetTexture->Desc.Extent.Y);
+
+    FRDGTextureRef TempTexture = GraphBuilder.CreateTexture(RenderTargetTexture->Desc, TEXT("Temp Texture"));
+    FRDGTextureUAVDesc TempUAVDesc = FRDGTextureUAVDesc(TempTexture);
+    FRDGTextureUAVRef TempUAV = GraphBuilder.CreateUAV(TempUAVDesc);
+
+    FRDGTextureUAVRef SceneColourTextureUAV = GraphBuilder.CreateUAV((*Inputs.SceneTextures)->SceneColorTexture);
+    //FRDGTextureUAVRef CustomDepthTextureUAV = GraphBuilder.CreateUAV((*Inputs.SceneTextures)->CustomDepthTexture);
+    //FRDGTextureUAVRef SceneDepthTextureUAV = GraphBuilder.CreateUAV((*Inputs.SceneTextures)->SceneDepthTexture);
+    //FRDGTextureUAVRef GBufferATextureUAV = GraphBuilder.CreateUAV((*Inputs.SceneTextures)->GBufferATexture);
+    //FRDGTextureUAVRef GBufferBTextureUAV = GraphBuilder.CreateUAV((*Inputs.SceneTextures)->GBufferBTexture);
+
+    FSomeTextureCS::FParameters* Parameters = GraphBuilder.AllocParameters<FSomeTextureCS::FParameters>();
+    Parameters->TextureSize = RenderTargetTexture->Desc.Extent;
+    Parameters->SceneColorSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
+    Parameters->View = View.ViewUniformBuffer;
+    Parameters->SceneTextures = SceneTextureShaderParameters;
+    //Parameters->SceneColorTexture = SceneColourTextureUAV;
+    Parameters->InputCustomDepthTexture = (*Inputs.SceneTextures)->CustomDepthTexture;
+    Parameters->InputSceneDepthTexture = (*Inputs.SceneTextures)->SceneDepthTexture;
+    Parameters->InputGBufferATexture = (*Inputs.SceneTextures)->GBufferATexture;
+    Parameters->InputGBufferDTexture = (*Inputs.SceneTextures)->GBufferDTexture;
+    Parameters->OutputTexture = TempUAV;
+
+    const FIntPoint ThreadCount = RenderViewport.Size();
+    const FIntVector GroupCount = FComputeShaderUtils::GetGroupCount(ThreadCount,
+        FIntPoint(GlintParametersCompute::THREADS_X, GlintParametersCompute::THREADS_Y));
+
+    constexpr bool bUseAsyncCompute = true;
+    const bool bAsyncCompute = /*GSupportsEfficientAsyncCompute &&*/ (GNumExplicitGPUsForRendering == 1) && bUseAsyncCompute;
+    const FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(GMaxRHIFeatureLevel);
+
+    const ERDGPassFlags PassFlags = bAsyncCompute ? ERDGPassFlags::AsyncCompute : ERDGPassFlags::Compute;
+    FComputeShaderUtils::AddPass(GraphBuilder, RDG_EVENT_NAME("SomeSceneTextureCompute %u", 4221), PassFlags,
+        TShaderMapRef<FSomeTextureCS>(GlobalShaderMap), Parameters, GroupCount);
+
+    AddCopyTexturePass(GraphBuilder, TempTexture, RenderTargetTexture);
+}
+
 void FComputeSceneViewExtension::CalcNormalOnePass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap,
     const bool bAsyncCompute)
 {
@@ -79,7 +158,7 @@ void FComputeSceneViewExtension::CalcNormalOnePass(FRDGBuilder& GraphBuilder, co
     const FIntVector GroupCount = FComputeShaderUtils::GetGroupCount(ThreadCount,
         FIntPoint(NormalOneCompute::THREADS_X, NormalOneCompute::THREADS_Y));
 
-    const ERDGPassFlags PassFlags = bAsyncCompute ? ERDGPassFlags::AsyncCompute : ERDGPassFlags::Compute;
+    const ERDGPassFlags PassFlags = /*bAsyncCompute ? ERDGPassFlags::AsyncCompute :*/ ERDGPassFlags::Compute;
     FComputeShaderUtils::AddPass(GraphBuilder, RDG_EVENT_NAME("Normal Compute Pass %u", 2), PassFlags,
         TShaderMapRef<FNormalOneCS>(GlobalShaderMap), Parameters, GroupCount);
 
@@ -111,7 +190,7 @@ void FComputeSceneViewExtension::CalcNormalTwoPass(FRDGBuilder& GraphBuilder, co
     const FIntVector GroupCount = FComputeShaderUtils::GetGroupCount(ThreadCount,
         FIntPoint(NormalTwoCompute::THREADS_X, NormalTwoCompute::THREADS_Y));
 
-    const ERDGPassFlags PassFlags = bAsyncCompute ? ERDGPassFlags::AsyncCompute : ERDGPassFlags::Compute;
+    const ERDGPassFlags PassFlags = /*bAsyncCompute ? ERDGPassFlags::AsyncCompute :*/ ERDGPassFlags::Compute;
     FComputeShaderUtils::AddPass(GraphBuilder, RDG_EVENT_NAME("Normal Compute Pass %u", 1), PassFlags,
         TShaderMapRef<FNormalTwoCS>(GlobalShaderMap), Parameters, GroupCount);
 
@@ -146,7 +225,7 @@ void FComputeSceneViewExtension::CalcGlintParametersPass(FRDGBuilder& GraphBuild
     const FIntVector GroupCount = FComputeShaderUtils::GetGroupCount(ThreadCount,
         FIntPoint(GlintParametersCompute::THREADS_X, GlintParametersCompute::THREADS_Y));
 
-    const ERDGPassFlags PassFlags = bAsyncCompute ? ERDGPassFlags::AsyncCompute : ERDGPassFlags::Compute;
+    const ERDGPassFlags PassFlags = /*bAsyncCompute ? ERDGPassFlags::AsyncCompute :*/ ERDGPassFlags::Compute;
     FComputeShaderUtils::AddPass(GraphBuilder, RDG_EVENT_NAME("Glint Parameters Pass %u", 1), PassFlags,
         TShaderMapRef<FGlintParametersCS>(GlobalShaderMap), Parameters, GroupCount);
 
@@ -171,6 +250,11 @@ void FComputeSceneViewExtension::SetGlintParametersTarget(UTextureRenderTarget2D
 void FComputeSceneViewExtension::SetNormalSource(UTextureRenderTarget2D* RenderTarget)
 {
     NormalSource = RenderTarget;
+}
+
+void FComputeSceneViewExtension::SetOutputSomeTextureTarget(UTextureRenderTarget2D* RenderTarget)
+{
+    OutputSomeTextureRT = RenderTarget;
 }
 
 TRefCountPtr<IPooledRenderTarget> FComputeSceneViewExtension::CreatePooledRenderTarget_RenderThread(UTextureRenderTarget2D* RenderTarget)

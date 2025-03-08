@@ -12,10 +12,12 @@ private:
     TObjectPtr<UTextureRenderTarget2D> NormalOneRT = nullptr;
     TObjectPtr<UTextureRenderTarget2D> NormalTwoRT = nullptr;
     TObjectPtr<UTextureRenderTarget2D> GlintParametersRT = nullptr;
+    TObjectPtr<UTextureRenderTarget2D> OutputSomeTextureRT = nullptr;
 
     TRefCountPtr<IPooledRenderTarget> PooledNormalOneRT;
     TRefCountPtr<IPooledRenderTarget> PooledNormalTwoRT;
     TRefCountPtr<IPooledRenderTarget> PooledGlintParametersRT;
+    TRefCountPtr<IPooledRenderTarget> PooledSomeTexturesRT;
 
     TObjectPtr<UTextureRenderTarget2D> NormalSource = nullptr;
     //TObjectPtr<UTextureRenderTarget2D> NormalTwoSource = nullptr;
@@ -31,9 +33,7 @@ public:
     {
     };
 
-    virtual void BeginRenderViewFamily(FSceneViewFamily& InViewFamily) override
-    {
-    };
+    virtual void BeginRenderViewFamily(FSceneViewFamily& InViewFamily) override;
 
     virtual void PostRenderBasePassDeferred_RenderThread(FRDGBuilder& GraphBuilder, FSceneView& InView,
         const FRenderTargetBindingSlots& RenderTargets, TRDGUniformBufferRef<FSceneTextureUniformParameters> SceneTextures) override
@@ -51,9 +51,7 @@ public:
     }
 
     virtual void PrePostProcessPass_RenderThread(FRDGBuilder& GraphBuilder, const FSceneView& View,
-        const FPostProcessingInputs& Inputs) override
-    {
-    }
+        const FPostProcessingInputs& Inputs) override;
 
     virtual void PostRenderViewFamily_RenderThread(FRDGBuilder& GraphBuilder, FSceneViewFamily& InViewFamily) override
     {
@@ -63,6 +61,7 @@ public:
     void SetTwoRenderTarget(UTextureRenderTarget2D* RenderTarget);
     void SetGlintParametersTarget(UTextureRenderTarget2D* RenderTarget);
     void SetNormalSource(UTextureRenderTarget2D* RenderTarget);
+    void SetOutputSomeTextureTarget(UTextureRenderTarget2D* RenderTarget);
 
 private:
     void CalcNormalOnePass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, bool bAsyncCompute);

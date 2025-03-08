@@ -26,6 +26,9 @@ public:
     UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "RenderTargets")
     TSoftObjectPtr<UTextureRenderTarget2D> GlintParametersTarget = nullptr;
     
+    UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "RenderTargets")
+    TSoftObjectPtr<UTextureRenderTarget2D> OutputSomeTextureTarget = nullptr;
+    
     UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Parameters")
     FVector3f SigmasRho;
 };

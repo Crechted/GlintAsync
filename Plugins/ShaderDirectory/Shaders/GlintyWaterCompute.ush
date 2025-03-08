@@ -3,25 +3,28 @@
 #include "/Engine/Private/Strata/Glint/GlintThirdParty.ush"
 #include "/Engine/Private/BRDF.ush"
 
+#include "/Engine/Private/DeferredShadingCommon.ush"
+#include "/Engine/Private/Common.ush"
+#include "/Engine/Private/SceneTextureParameters.ush"
 //=============================================================================
 //======== Tangent space maths ================================================
 //=============================================================================
-float get_cos_theta(const float3 w)       {return w.z;}
-float get_cos_2_theta(const float3 w)     {return w.z*w.z;}
-float get_sin_2_theta(const float3 w)     {return max(0.f, 1.f - get_cos_2_theta(w));}
-float get_sin_theta(const float3 w)       {return sqrt(get_sin_2_theta(w));}
-float get_tan_theta(const float3 w)       {return get_sin_theta(w) / get_cos_theta(w);}
-float get_cos_phi(const float3 w)         {return (get_sin_theta(w) == 0.f) ? 1.f : clamp(w.x / get_sin_theta(w), -1.f, 1.f);}
-float get_sin_phi(const float3 w)         {return (get_sin_theta(w) == 0.f) ? 0.f : clamp(w.y / get_sin_theta(w), -1.f, 1.f);}
-float get_cos_2_phi(const float3 w)       {return get_cos_phi(w) * get_cos_phi(w);}
-float get_sin_2_phi(const float3 w)       {return get_sin_phi(w) * get_sin_phi(w);} 
+float get_cos_theta(const float3 w) { return w.z; }
+float get_cos_2_theta(const float3 w) { return w.z * w.z; }
+float get_sin_2_theta(const float3 w) { return max(0.f, 1.f - get_cos_2_theta(w)); }
+float get_sin_theta(const float3 w) { return sqrt(get_sin_2_theta(w)); }
+float get_tan_theta(const float3 w) { return get_sin_theta(w) / get_cos_theta(w); }
+float get_cos_phi(const float3 w) { return (get_sin_theta(w) == 0.f) ? 1.f : clamp(w.x / get_sin_theta(w), -1.f, 1.f); }
+float get_sin_phi(const float3 w) { return (get_sin_theta(w) == 0.f) ? 0.f : clamp(w.y / get_sin_theta(w), -1.f, 1.f); }
+float get_cos_2_phi(const float3 w) { return get_cos_phi(w) * get_cos_phi(w); }
+float get_sin_2_phi(const float3 w) { return get_sin_phi(w) * get_sin_phi(w); }
 
 //=============================================================================
 //======== Shifting view/incident direction for off-center V-cavity ===========
 //=============================================================================
 float3 shift_W(float3 w, // vector to be transformed
-             float x0, float y0 // average slope
-             )
+    float x0, float y0 // average slope
+    )
 {
     float3 shifted_w = float3(0., 0., 0.);
 
@@ -42,7 +45,8 @@ float3 shift_W(float3 w, // vector to be transformed
     float w_xy_length = length(w_xy);
 
     float shifted_w_z;
-    if (cos_mu_phi < 0.) {
+    if (cos_mu_phi < 0.)
+    {
         shifted_w_z = w_xy_length * (w_xy_length * cos_mu_phi - w_z * sin_mu_phi) / (w_z * cos_mu_phi + w_xy_length * sin_mu_phi);
     }
     else
@@ -57,9 +61,9 @@ float3x3 make_tbn(float3 n)
 {
     float a0 = 1.0f / (1.0f + n.z);
     float b0 = -n.x * n.y * a0;
-    float3 t = normalize(float3(1.0f -n.x * n.x * a0, b0, -n.x));
-    float3 b = normalize(float3(b0, 1.0f -n.y * n.y * a0, -n.y));
-    return float3x3(t,b,n);
+    float3 t = normalize(float3(1.0f - n.x * n.x * a0, b0, -n.x));
+    float3 b = normalize(float3(b0, 1.0f - n.y * n.y * a0, -n.y));
+    return float3x3(t, b, n);
 }
 
 SamplerState SceneColorSampler;
@@ -80,33 +84,31 @@ RWTexture2D<float3> GlintsResultTexture;
 [numthreads(THREADS_X, THREADS_Y, 1)]
 void AccumulateGlintWaterModelCompute(uint3 DispatchThreadID : SV_DispatchThreadID, uint3 GroupThreadID : SV_GroupThreadID)
 {
-    const float3x3 WorldToTangent = make_tbn(WorldNormal);
+    float2 UV = DispatchThreadID.xy / TextureSize;
     
-	//const float3 N = WorldNormal;
-	const float3 V = CameraVector;
+
+    const float3x3 WorldToTangent = make_tbn(WorldNormal);
+
+    const float3 N = WorldNormal;
+    const float3 V = CameraVector;
     const float3 L = LightVector.xyz;
 
     //const float3 wg = float3(0.0f, 0.0f, 1.0f); //normalize(mul(N, WorldToTangent));
     const float3 wo = normalize(mul(V, WorldToTangent));
     const float3 wi = normalize(mul(L, WorldToTangent));
 
-	const float NoV = saturate( abs( dot(N, V) ) + 1e-5 );
+    const float NoV = saturate(abs(dot(N, V)) + 1e-5);
 
-	float2 GlintUV = DispatchThreadID.xy / TextureSize;
 
-    float2 Normals1 = NormalTexture1.SampleLevel(SceneColorSampler, GlintUV, 0).xy;
-    float3 GlintParams = GlintParamsTexture.SampleLevel(SceneColorSampler, GlintUV, 0).xyz;
-    
-    SurfaceColor = DiffuseColor + EmissiveColor;
-	
-    float density = GetGlintyWaterParams5(MaterialParams);
+    float2 Normals1 = NormalTexture1.SampleLevel(SceneColorSampler, UV, 0).xy;
+    float3 GlintParams = GlintParamsTexture.SampleLevel(SceneColorSampler, UV, 0).xyz;
 
     float sigma_x = GlintParams.x;
     float sigma_y = GlintParams.y;
     float rho = GlintParams.z;
     float3 wn = float3(-Normals1.x, -Normals1.y, 1.) / sqrt(1 + Normals1.x * Normals1.x + Normals1.y * Normals1.y);
-    
-    float D = f_P(wo, wi, float3(sigma_x, sigma_y, rho), density, GlintUV, ddx(GlintUV), ddy(GlintUV), false);
+
+    float D = f_P(wo, wi, float3(sigma_x, sigma_y, rho), density, UV, ddx(UV), ddy(UV), false);
 
     float3 wh = normalize(wo + wi);
 
@@ -125,10 +127,8 @@ void AccumulateGlintWaterModelCompute(uint3 DispatchThreadID : SV_DispatchThread
     float G = clamp(G1wowh * G1wiwh, 0., 1.);
 
     // Fresnel
-    float3 F = F_Schlick(float3(1,1,1), NoV);
+    float3 F = F_Schlick(float3(1, 1, 1), NoV);
 
     float3 GlintRes = slope_projected_area.z * (F * G * D) / 4.;
     GlintsResultTexture[DispatchThreadID.xy] = GlintRes;
 }
-
-

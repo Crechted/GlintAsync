@@ -34,13 +34,24 @@ void URenderTargetSubsystem::Initialize(FSubsystemCollectionBase& Collection)
         UE_LOG(LogTexture, Error, TEXT("No Render Target for NormalTwo found"));
     }
 
-    if (const auto Normal = GetDefault<UGlintsSettings>()->NormalSource.LoadSynchronous())
+    RenderTargetNormalSource = GetDefault<UGlintsSettings>()->NormalSource.LoadSynchronous();
+    if (RenderTargetNormalSource)
     {
-        ComputeSceneViewExtension->SetNormalSource(Normal);
+        ComputeSceneViewExtension->SetNormalSource(RenderTargetNormalSource);
     }
     else
     {
         UE_LOG(LogTexture, Error, TEXT("No Normal Source ONE found"));
+    }
+
+    RenderTargetSomeTexture = GetDefault<UGlintsSettings>()->OutputSomeTextureTarget.LoadSynchronous();
+    if (RenderTargetSomeTexture)
+    {
+        ComputeSceneViewExtension->SetOutputSomeTextureTarget(RenderTargetSomeTexture);
+    }
+    else
+    {
+        UE_LOG(LogTexture, Error, TEXT("No Output Some Texture Target found"));
     }
 
     RenderTargetGlintParameters = GetDefault<UGlintsSettings>()->GlintParametersTarget.LoadSynchronous();
@@ -52,6 +63,7 @@ void URenderTargetSubsystem::Initialize(FSubsystemCollectionBase& Collection)
     {
         UE_LOG(LogTexture, Error, TEXT("No Glint Parameters RT found"));
     }
+    
 }
 
 void URenderTargetSubsystem::Deinitialize()

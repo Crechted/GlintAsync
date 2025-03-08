@@ -23,6 +23,12 @@ private:
     TObjectPtr<UTextureRenderTarget2D> RenderTargetNormalTwo = nullptr;
 
     UPROPERTY()
+    TObjectPtr<UTextureRenderTarget2D> RenderTargetNormalSource = nullptr;
+
+    UPROPERTY()
+    TObjectPtr<UTextureRenderTarget2D> RenderTargetSomeTexture = nullptr;
+
+    UPROPERTY()
     TObjectPtr<UTextureRenderTarget2D> RenderTargetGlintParameters = nullptr;
 
 public:

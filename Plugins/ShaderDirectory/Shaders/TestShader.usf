@@ -1,0 +1,35 @@
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
+#pragma once
+#include "/Engine/Private/Strata/Glint/GlintThirdParty.ush"
+#include "/Engine/Private/BRDF.ush"
+
+#include "/Engine/Private/DeferredShadingCommon.ush"
+#include "/Engine/Private/Common.ush"
+#include "/Engine/Private/SceneTextureParameters.ush"
+
+SamplerState SceneColorSampler;
+float2 TextureSize;
+
+RWTexture2D<float4> InputSceneColorTexture;
+Texture2D<float4> InputCustomDepthTexture;
+Texture2D<float4> InputSceneDepthTexture;
+Texture2D<float4> InputGBufferATexture;
+Texture2D<float4> InputGBufferDTexture;
+
+RWTexture2D<float4> OutputTexture;
+
+#define THREADS_X 16
+#define THREADS_Y 16
+
+[numthreads(THREADS_X, THREADS_Y, 1)]
+void AccumulateSomeTextureCompute(uint3 DispatchThreadID : SV_DispatchThreadID, uint3 GroupThreadID : SV_GroupThreadID)
+{
+    float2 UV = DispatchThreadID.xy / TextureSize;
+    
+    //float4 OutputColor = InputGBufferDTexture[DispatchThreadID.xy];
+    //const float4 OutputColor = SceneTexturesStruct.CustomDepthTexture.Load(int3(DispatchThreadID.xy, 0)).r;
+    const float4 OutputColor = Texture2DSampleLevel(SceneTexturesStruct.CustomDepthTexture, SceneTexturesStruct_CustomDepthTextureSampler, UV, 0).r;
+    //const float3 OutputColor = CalcSceneCustomDepth(UV);
+
+    OutputTexture[DispatchThreadID.xy] = OutputColor;
+}
