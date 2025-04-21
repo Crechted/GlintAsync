@@ -65,6 +65,6 @@ private:
     void CalcNormalOnePass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, bool bAsyncCompute);
     void CalcNormalTwoPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, bool bAsyncCompute);
     void CalcGlintParametersPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, bool bAsyncCompute);
-    TRefCountPtr<IPooledRenderTarget> CreatePooledRenderTarget_RenderThread(UTextureRenderTarget2D* RenderTarget);
+    TRefCountPtr<IPooledRenderTarget> CreatePooledRenderTarget_RenderThread(UTextureRenderTarget2D* RenderTarget, ETextureCreateFlags Flags = TexCreate_RenderTargetable | TexCreate_ShaderResource | TexCreate_UAV );
 };
 

@@ -102,24 +102,33 @@ inline void FComputeSceneViewExtension::PreRenderView_RenderThread(FRDGBuilder& 
     constexpr bool bUseAsyncCompute = true;
     const bool bAsyncCompute = /*GSupportsEfficientAsyncCompute &&*/ (GNumExplicitGPUsForRendering == 1) && bUseAsyncCompute;
 
-    //CalcNormalOnePass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
-    //CalcNormalTwoPass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
-    //CalcGlintParametersPass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
-    
+    CalcNormalOnePass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
+    CalcNormalTwoPass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
+    CalcGlintParametersPass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
+
     if (!OutputSomeTextureRT) return;
 
     if (!PooledSomeTexturesRT.IsValid())
     {
-        PooledSomeTexturesRT = CreatePooledRenderTarget_RenderThread(OutputSomeTextureRT);
+        PooledSomeTexturesRT = CreatePooledRenderTarget_RenderThread(OutputSomeTextureRT, TexCreate_RenderTargetable);
+        if (!PooledSomeTexturesRT) return;
     }
-    
+
     if (auto View = static_cast<const FViewInfo*>(&InView))
     {
         RDG_GPU_MASK_SCOPE(GraphBuilder, View->GPUMask);
 
+        GraphBuilder.BeginEventScope(RDG_EVENT_NAME("Immediately  Scope"));
+
+        //FRDGTextureRef RenderTargetTexture = GraphBuilder.FindExternalTexture(OutputSomeTextureRT->GetRenderTargetResource()->GetRenderTargetTexture());
         FRDGTextureRef RenderTargetTexture = GraphBuilder.RegisterExternalTexture(PooledSomeTexturesRT, TEXT("Bound Render Target"));
+
+        FRDGTextureRef TempTexture = GraphBuilder.CreateTexture(RenderTargetTexture->Desc, TEXT("Temp Texture"));
+
         TStaticArray<FRenderTargetBinding, MaxSimultaneousRenderTargets> Output;
-        Output[0] = FRenderTargetBinding(RenderTargetTexture, ERenderTargetLoadAction::EClear);
+
+        //Output[0] = FRenderTargetBinding(RenderTargetTexture, ERenderTargetLoadAction::EClear);
+        Output[0] = FRenderTargetBinding(TempTexture, ERenderTargetLoadAction::EClear);
 
         FWaterPassParameters* PassParameters = GraphBuilder.AllocParameters<FWaterPassParameters>();
         PassParameters->RenderTargets.Output = Output;
@@ -139,10 +148,10 @@ inline void FComputeSceneViewExtension::PreRenderView_RenderThread(FRDGBuilder& 
         FMeshPassProcessorRenderState PassDrawRenderState;
         PassDrawRenderState.SetBlendState(TStaticBlendStateWriteMask<CW_RGBA, CW_RGBA, CW_RGBA, CW_RGBA>::GetRHI());
 
-        if (PassDrawRenderState.GetDepthStencilAccess() & FExclusiveDepthStencil::DepthWrite)
+        /*if (PassDrawRenderState.GetDepthStencilAccess() & FExclusiveDepthStencil::DepthWrite)
             PassDrawRenderState.SetDepthStencilState(TStaticDepthStencilState<true, CF_DepthNearOrEqual>::GetRHI());
-        else
-            PassDrawRenderState.SetDepthStencilState(TStaticDepthStencilState<false, CF_DepthNearOrEqual>::GetRHI());
+        else*/
+        PassDrawRenderState.SetDepthStencilState(TStaticDepthStencilState<false, CF_DepthNearOrEqual>::GetRHI());
 
         // Настройте параметры...
         AddDrawDynamicMeshPass(GraphBuilder, RDG_EVENT_NAME("Vertex and Pixel Water Shader%u", 1), PassParameters, InView, View->ViewRect,
@@ -176,6 +185,11 @@ inline void FComputeSceneViewExtension::PreRenderView_RenderThread(FRDGBuilder& 
                     }
                 }
             });
+
+        GraphBuilder.EndEventScope();
+        GraphBuilder.BeginEventScope(RDG_EVENT_NAME("Copy  Scope"));
+        //AddCopyTexturePass(GraphBuilder, TempTexture, RenderTargetTexture);
+        GraphBuilder.EndEventScope();
     }
 }
 
@@ -183,6 +197,7 @@ void FComputeSceneViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& Gr
     const FPostProcessingInputs& Inputs)
 {
     FSceneViewExtensionBase::PrePostProcessPass_RenderThread(GraphBuilder, InView, Inputs);
+    return;
 
     if (!OutputSomeTextureRT) return;
 
@@ -190,8 +205,6 @@ void FComputeSceneViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& Gr
     {
         PooledSomeTexturesRT = CreatePooledRenderTarget_RenderThread(OutputSomeTextureRT);
     }
-
-    return;
 
     if (!OutputSomeTextureRT) return;
 
@@ -374,7 +387,8 @@ void FComputeSceneViewExtension::SetOutputSomeTextureTarget(UTextureRenderTarget
     OutputSomeTextureRT = RenderTarget;
 }
 
-TRefCountPtr<IPooledRenderTarget> FComputeSceneViewExtension::CreatePooledRenderTarget_RenderThread(UTextureRenderTarget2D* RenderTarget)
+TRefCountPtr<IPooledRenderTarget> FComputeSceneViewExtension::CreatePooledRenderTarget_RenderThread(UTextureRenderTarget2D* RenderTarget,
+    ETextureCreateFlags Flags)
 {
     TRefCountPtr<IPooledRenderTarget> Result = nullptr;
 
@@ -400,7 +414,7 @@ TRefCountPtr<IPooledRenderTarget> FComputeSceneViewExtension::CreatePooledRender
 
     // Flags allow it to be used as a render target, shader resource, UAV 
     FPooledRenderTargetDesc RenderTargetDesc = FPooledRenderTargetDesc::Create2DDesc(RenderTargetResource->GetSizeXY(),
-        RenderTargetRHI->GetDesc().Format, FClearValueBinding::Black, TexCreate_RenderTargetable | TexCreate_ShaderResource | TexCreate_UAV,
+        RenderTargetRHI->GetDesc().Format, FClearValueBinding::Black, Flags,
         TexCreate_None, false);
 
     GRenderTargetPool.CreateUntrackedElement(RenderTargetDesc, Result, RenderTargetItem);
