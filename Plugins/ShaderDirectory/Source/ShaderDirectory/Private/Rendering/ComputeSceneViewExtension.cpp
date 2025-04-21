@@ -1,5 +1,6 @@
 ﻿#include "Rendering/ComputeSceneViewExtension.h"
 
+#include "PixelShaderUtils.h"
 #include "RenderGraphEvent.h"
 #include "SceneTexturesConfig.h"
 #include "RenderGraphBuilder.h"
@@ -8,15 +9,50 @@
 #include "ShaderPasses/NormalOneCS.h"
 
 #include "RenderGraphUtils.h"
+#include "MeshPassProcess/WaterMeshPassProcess.h"
 #include "PostProcess/PostProcessing.h"
 #include "ShaderDirectory/GlintsSettings.h"
 #include "ShaderPasses/GlintParametersCS.h"
 #include "ShaderPasses/NormalTwoCS.h"
 #include "ShaderPasses/SceneTextureCS.h"
+#include "MeshPassProcessor.h"
+#include "MeshPassProcessor.inl"
+#include "BasePassRendering.h"
+#include "BasePassRendering.inl"
+//#include "BasePassRendering.cpp"
+
+#include "ScenePrivate.h"
+#include "SceneRendering.h"
+#include "InstanceCulling/InstanceCullingContext.h"
+//#include "WaterGlintHelper.h"
+
+
+BEGIN_SHADER_PARAMETER_STRUCT(FWaterPassParameters,)
+    //SHADER_PARAMETER_RDG_UNIFORM_BUFFER(FOpaqueBasePassUniformParameters, BasePass)
+    SHADER_PARAMETER_RDG_UNIFORM_BUFFER(FInstanceCullingGlobalUniforms, InstanceCulling)
+    SHADER_PARAMETER_RDG_UNIFORM_BUFFER(FSceneUniformParameters, SceneBuffer)
+    RENDER_TARGET_BINDING_SLOTS() // OMSetRenderTarget
+END_SHADER_PARAMETER_STRUCT()
+
+//IMPLEMENT_GLOBAL_SHADER_PARAMETER_STRUCT(FForwardLightData, "ForwardLightData");
+
+FForwardLightData::FForwardLightData()
+{
+    FMemory::Memzero(*this);
+    ShadowmapSampler = TStaticSamplerState<SF_Point, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
+    DirectionalLightStaticShadowmap = GBlackTexture->TextureRHI;
+    StaticShadowmapSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
+}
+
 
 DECLARE_GPU_DRAWCALL_STAT(NormalCompute); // Unreal Insights
 
+
 FComputeSceneViewExtension::FComputeSceneViewExtension(const FAutoRegister& AutoRegister) : FSceneViewExtensionBase(AutoRegister)
+{
+}
+
+void FComputeSceneViewExtension::SetupView(FSceneViewFamily& InViewFamily, FSceneView& InView)
 {
 }
 
@@ -66,15 +102,87 @@ inline void FComputeSceneViewExtension::PreRenderView_RenderThread(FRDGBuilder& 
     constexpr bool bUseAsyncCompute = true;
     const bool bAsyncCompute = /*GSupportsEfficientAsyncCompute &&*/ (GNumExplicitGPUsForRendering == 1) && bUseAsyncCompute;
 
-    CalcNormalOnePass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
-    CalcNormalTwoPass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
-    CalcGlintParametersPass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
+    //CalcNormalOnePass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
+    //CalcNormalTwoPass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
+    //CalcGlintParametersPass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
+    
+    if (!OutputSomeTextureRT) return;
+
+    if (!PooledSomeTexturesRT.IsValid())
+    {
+        PooledSomeTexturesRT = CreatePooledRenderTarget_RenderThread(OutputSomeTextureRT);
+    }
+    
+    if (auto View = static_cast<const FViewInfo*>(&InView))
+    {
+        RDG_GPU_MASK_SCOPE(GraphBuilder, View->GPUMask);
+
+        FRDGTextureRef RenderTargetTexture = GraphBuilder.RegisterExternalTexture(PooledSomeTexturesRT, TEXT("Bound Render Target"));
+        TStaticArray<FRenderTargetBinding, MaxSimultaneousRenderTargets> Output;
+        Output[0] = FRenderTargetBinding(RenderTargetTexture, ERenderTargetLoadAction::EClear);
+
+        FWaterPassParameters* PassParameters = GraphBuilder.AllocParameters<FWaterPassParameters>();
+        PassParameters->RenderTargets.Output = Output;
+        PassParameters->InstanceCulling = FInstanceCullingContext::CreateDummyInstanceCullingUniformBuffer(GraphBuilder);
+        PassParameters->SceneBuffer = GetSceneUniformBufferRef(GraphBuilder, *View);
+
+        //FWaterPassParameters* PassParameters = FWaterGlintHelper::CreateWaterPassParameters(GraphBuilder, *View, Output);//CreateOpaqueBasePassUniformBuffer(GraphBuilder, *View);
+
+        // Настройка глубины
+        /*PassParameters->RenderTargets.DepthStencil = FDepthStencilBinding(
+            SceneTextures.Depth.Target,
+            ERenderTargetLoadAction::ELoad,
+            ERenderTargetStoreAction::ENoAction,
+            FExclusiveDepthStencil::DepthRead_StencilRead);
+            */
+
+        FMeshPassProcessorRenderState PassDrawRenderState;
+        PassDrawRenderState.SetBlendState(TStaticBlendStateWriteMask<CW_RGBA, CW_RGBA, CW_RGBA, CW_RGBA>::GetRHI());
+
+        if (PassDrawRenderState.GetDepthStencilAccess() & FExclusiveDepthStencil::DepthWrite)
+            PassDrawRenderState.SetDepthStencilState(TStaticDepthStencilState<true, CF_DepthNearOrEqual>::GetRHI());
+        else
+            PassDrawRenderState.SetDepthStencilState(TStaticDepthStencilState<false, CF_DepthNearOrEqual>::GetRHI());
+
+        // Настройте параметры...
+        AddDrawDynamicMeshPass(GraphBuilder, RDG_EVENT_NAME("Vertex and Pixel Water Shader%u", 1), PassParameters, InView, View->ViewRect,
+            [View, PassDrawRenderState](FDynamicPassMeshDrawListContext* DynamicMeshPassContext)
+            {
+                // Создаем процессор для вашего пасса
+                FWaterMeshPassProcessor PassProcessor(
+                    View->Family->Scene->GetRenderScene(),
+                    View->FeatureLevel,
+                    View,
+                    PassDrawRenderState,
+                    DynamicMeshPassContext);
+                if (const FScene* Scene = View->Family->Scene->GetRenderScene())
+                {
+                    auto WaterProxies = Scene->GetPrimitiveSceneProxies().FilterByPredicate([&](const FPrimitiveSceneProxy* Proxy)
+                    {
+                        return Proxy->GetTypeHash() == FCustomWaterMeshSceneProxy::WaterTypeHash();
+                    });
+                    UE_LOG(LogTemp, Display, TEXT("WaterProxies %d"), WaterProxies.Num());
+
+                    for (auto SceneProxy : WaterProxies)
+                    {
+                        TArray<FMeshBatch> MeshElements;
+                        SceneProxy->GetMeshDescription(0, MeshElements);
+                        UE_LOG(LogTemp, Display, TEXT("Meshes %d"), MeshElements.Num());
+                        if (MeshElements.IsEmpty()) continue;
+
+                        const FMeshBatch& Mesh = MeshElements[0];
+                        const uint64 DefaultBatchElementMask = ~0ull;
+                        PassProcessor.AddMeshBatch(Mesh, DefaultBatchElementMask, SceneProxy, 0);
+                    }
+                }
+            });
+    }
 }
 
-void FComputeSceneViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& GraphBuilder, const FSceneView& View,
+void FComputeSceneViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& GraphBuilder, const FSceneView& InView,
     const FPostProcessingInputs& Inputs)
 {
-    FSceneViewExtensionBase::PrePostProcessPass_RenderThread(GraphBuilder, View, Inputs);
+    FSceneViewExtensionBase::PrePostProcessPass_RenderThread(GraphBuilder, InView, Inputs);
 
     if (!OutputSomeTextureRT) return;
 
@@ -83,7 +191,16 @@ void FComputeSceneViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& Gr
         PooledSomeTexturesRT = CreatePooledRenderTarget_RenderThread(OutputSomeTextureRT);
     }
 
-    FSceneTextureShaderParameters SceneTextureShaderParameters = CreateSceneTextureShaderParameters(GraphBuilder, View,
+    return;
+
+    if (!OutputSomeTextureRT) return;
+
+    if (!PooledSomeTexturesRT.IsValid())
+    {
+        PooledSomeTexturesRT = CreatePooledRenderTarget_RenderThread(OutputSomeTextureRT);
+    }
+
+    FSceneTextureShaderParameters SceneTextureShaderParameters = CreateSceneTextureShaderParameters(GraphBuilder, InView,
         ESceneTextureSetupMode::All);
 
     RDG_GPU_STAT_SCOPE(GraphBuilder, NormalCompute);
@@ -108,7 +225,7 @@ void FComputeSceneViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& Gr
     FSomeTextureCS::FParameters* Parameters = GraphBuilder.AllocParameters<FSomeTextureCS::FParameters>();
     Parameters->TextureSize = RenderTargetTexture->Desc.Extent;
     Parameters->SceneColorSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
-    Parameters->View = View.ViewUniformBuffer;
+    Parameters->View = InView.ViewUniformBuffer;
     Parameters->SceneTextures = SceneTextureShaderParameters;
     //Parameters->SceneColorTexture = SceneColourTextureUAV;
     Parameters->InputCustomDepthTexture = (*Inputs.SceneTextures)->CustomDepthTexture;

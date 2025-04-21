@@ -1,11 +1,9 @@
 ﻿#pragma once
 
-#include "CoreMinimal.h"
+
 #include "SceneViewExtension.h"
 
-/**
- * 
- */
+
 class SHADERDIRECTORY_API FComputeSceneViewExtension : public FSceneViewExtensionBase
 {
 private:
@@ -19,19 +17,19 @@ private:
     TRefCountPtr<IPooledRenderTarget> PooledGlintParametersRT;
     TRefCountPtr<IPooledRenderTarget> PooledSomeTexturesRT;
 
+    FRDGTexture* InTexture;
+
     TObjectPtr<UTextureRenderTarget2D> NormalSource = nullptr;
     //TObjectPtr<UTextureRenderTarget2D> NormalTwoSource = nullptr;
 
 public:
     FComputeSceneViewExtension(const FAutoRegister& AutoRegister);
-
+    
     virtual void SetupViewFamily(FSceneViewFamily& InViewFamily) override
     {
     };
 
-    virtual void SetupView(FSceneViewFamily& InViewFamily, FSceneView& InView) override
-    {
-    };
+    virtual void SetupView(FSceneViewFamily& InViewFamily, FSceneView& InView) override;
 
     virtual void BeginRenderViewFamily(FSceneViewFamily& InViewFamily) override;
 
@@ -69,3 +67,4 @@ private:
     void CalcGlintParametersPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, bool bAsyncCompute);
     TRefCountPtr<IPooledRenderTarget> CreatePooledRenderTarget_RenderThread(UTextureRenderTarget2D* RenderTarget);
 };
+

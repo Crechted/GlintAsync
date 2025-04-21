@@ -28,7 +28,7 @@ void AccumulateSomeTextureCompute(uint3 DispatchThreadID : SV_DispatchThreadID, 
     
     //float4 OutputColor = InputGBufferDTexture[DispatchThreadID.xy];
     //const float4 OutputColor = SceneTexturesStruct.CustomDepthTexture.Load(int3(DispatchThreadID.xy, 0)).r;
-    const float4 OutputColor = Texture2DSampleLevel(SceneTexturesStruct.CustomDepthTexture, SceneTexturesStruct_CustomDepthTextureSampler, UV, 0).r;
+    const float4 OutputColor = Texture2DSampleLevel(SceneTexturesStruct.SceneDepthTexture, SceneTexturesStruct_SceneDepthTextureSampler, UV, 0).r;
     //const float3 OutputColor = CalcSceneCustomDepth(UV);
 
     OutputTexture[DispatchThreadID.xy] = OutputColor;

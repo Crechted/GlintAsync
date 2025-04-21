@@ -42,7 +42,7 @@ public class ShaderDirectory : ModuleRules
 				"SlateCore",
 				"DeveloperSettings",
                 "RenderCore", 
-                "Renderer"
+                "Renderer",
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);
