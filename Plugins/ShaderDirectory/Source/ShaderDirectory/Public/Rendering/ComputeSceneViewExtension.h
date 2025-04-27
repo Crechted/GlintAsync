@@ -11,11 +11,13 @@ private:
     TObjectPtr<UTextureRenderTarget2D> NormalTwoRT = nullptr;
     TObjectPtr<UTextureRenderTarget2D> GlintParametersRT = nullptr;
     TObjectPtr<UTextureRenderTarget2D> OutputSomeTextureRT = nullptr;
+    TObjectPtr<UTextureRenderTarget2D> OutputDepthStencilRT = nullptr;
 
     TRefCountPtr<IPooledRenderTarget> PooledNormalOneRT;
     TRefCountPtr<IPooledRenderTarget> PooledNormalTwoRT;
     TRefCountPtr<IPooledRenderTarget> PooledGlintParametersRT;
     TRefCountPtr<IPooledRenderTarget> PooledSomeTexturesRT;
+    TRefCountPtr<IPooledRenderTarget> PooledDepthStencilRT;
 
     FRDGTexture* InTexture;
 
@@ -44,9 +46,7 @@ public:
 
     virtual void PreRenderView_RenderThread(FRDGBuilder& GraphBuilder, FSceneView& InView) override;
 
-    virtual void PostRenderView_RenderThread(FRDGBuilder& GraphBuilder, FSceneView& InView) override
-    {
-    }
+    virtual void PostRenderView_RenderThread(FRDGBuilder& GraphBuilder, FSceneView& InView) override;
 
     virtual void PrePostProcessPass_RenderThread(FRDGBuilder& GraphBuilder, const FSceneView& View,
         const FPostProcessingInputs& Inputs) override;
@@ -60,8 +60,10 @@ public:
     void SetGlintParametersTarget(UTextureRenderTarget2D* RenderTarget);
     void SetNormalSource(UTextureRenderTarget2D* RenderTarget);
     void SetOutputSomeTextureTarget(UTextureRenderTarget2D* RenderTarget);
+    void SetOutputDepthStencilTarget(UTextureRenderTarget2D* RenderTarget);
 
 private:
+    void DrawWaterMesh(FRDGBuilder& GraphBuilder, FSceneView& InView);
     void CalcNormalOnePass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, bool bAsyncCompute);
     void CalcNormalTwoPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, bool bAsyncCompute);
     void CalcGlintParametersPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, bool bAsyncCompute);

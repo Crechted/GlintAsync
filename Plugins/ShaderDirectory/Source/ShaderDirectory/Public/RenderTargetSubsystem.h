@@ -29,6 +29,9 @@ private:
     TObjectPtr<UTextureRenderTarget2D> RenderTargetSomeTexture = nullptr;
 
     UPROPERTY()
+    TObjectPtr<UTextureRenderTarget2D> RenderTargetDepthStencilGlint = nullptr;
+
+    UPROPERTY()
     TObjectPtr<UTextureRenderTarget2D> RenderTargetGlintParameters = nullptr;
 
 public:

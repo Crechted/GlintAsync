@@ -14,7 +14,6 @@ public:
     {
         // Compile if supported by the hardware.
         const bool bIsFeatureSupported = IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM5);
-
         return bIsFeatureSupported && FMeshMaterialShader::ShouldCompilePermutation(Parameters);
     }
 

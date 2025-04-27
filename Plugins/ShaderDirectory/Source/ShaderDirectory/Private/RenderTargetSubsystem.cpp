@@ -54,6 +54,16 @@ void URenderTargetSubsystem::Initialize(FSubsystemCollectionBase& Collection)
         UE_LOG(LogTexture, Error, TEXT("No Output Some Texture Target found"));
     }
 
+    RenderTargetDepthStencilGlint = GetDefault<UGlintsSettings>()->OutputDepthStencilGlintTarget.LoadSynchronous();
+    if (RenderTargetDepthStencilGlint)
+    {
+        ComputeSceneViewExtension->SetOutputDepthStencilTarget(RenderTargetDepthStencilGlint);
+    }
+    else
+    {
+        UE_LOG(LogTexture, Error, TEXT("No DepthStencil Target found"));
+    }
+
     RenderTargetGlintParameters = GetDefault<UGlintsSettings>()->GlintParametersTarget.LoadSynchronous();
     if (RenderTargetGlintParameters)
     {

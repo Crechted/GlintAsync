@@ -79,7 +79,7 @@ public:
         , FMeshPassDrawListContext* InDrawListContext);
 
     virtual void AddMeshBatch(const FMeshBatch& MeshBatch, uint64 BatchElementMask, const FPrimitiveSceneProxy* PrimitiveSceneProxy,
-        int32 StaticMeshId) override;
+        int32 StaticMeshId = -1) override;
 
     FMeshPassProcessorRenderState PassDrawRenderState;
 };
