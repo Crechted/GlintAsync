@@ -1,0 +1,15 @@
+#include "/Engine/Private/Common.ush"
+#include "/Engine/Private/DeferredShadingCommon.ush"
+
+float2 TextureSize;
+Texture2D<float4> SceneColorTexture;
+Texture2D<float4> GlintResultTexture;
+
+float4 GlintComposePS(float4 SvPosition : SV_POSITION) : SV_Target0
+{
+    const float4 SceneColour = SceneColorTexture.Load(int3(SvPosition.xy, 0));
+    const float4 GlintResult = GlintResultTexture.Load(int3(SvPosition.xy, 0));
+
+    // Otherwise return greyscale version of scene colour
+    return SceneColour + GlintResult;
+}

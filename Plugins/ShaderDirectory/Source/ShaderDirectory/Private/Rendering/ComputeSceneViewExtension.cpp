@@ -25,6 +25,7 @@
 #include "SceneView.h"
 #include "SceneRendering.h"
 #include "InstanceCulling/InstanceCullingContext.h"
+#include "ShaderPasses/GlintComposePS.h"
 //#include "WaterGlintHelper.h"
 
 
@@ -160,6 +161,34 @@ void FComputeSceneViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& Gr
     const FPostProcessingInputs& Inputs)
 {
     FSceneViewExtensionBase::PrePostProcessPass_RenderThread(GraphBuilder, InView, Inputs);
+
+    if (!PooledGlintResultRT.IsValid())
+    {
+        PooledGlintResultRT = CreatePooledRenderTarget_RenderThread(GlintResultRT);
+    }
+
+    RDG_GPU_STAT_SCOPE(GraphBuilder, NormalCompute);
+    RDG_EVENT_SCOPE(GraphBuilder, "SceneTextureCompute FOUR");
+
+    const FIntRect Viewport = static_cast<const FViewInfo&>(InView).ViewRect;
+    const FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(GMaxRHIFeatureLevel);
+
+    const FSceneTextureShaderParameters SceneTextures = CreateSceneTextureShaderParameters(GraphBuilder, InView,
+        ESceneTextureSetupMode::SceneColor | ESceneTextureSetupMode::GBuffers);
+
+    const FScreenPassTexture SceneColourTexture((*Inputs.SceneTextures)->SceneColorTexture, Viewport);
+
+    FGlintComposePS::FParameters* Parameters = GraphBuilder.AllocParameters<FGlintComposePS::FParameters>();
+    Parameters->SceneColorTexture = SceneColourTexture.Texture;
+    Parameters->SceneTextures = SceneTextures;
+    Parameters->View = InView.ViewUniformBuffer;
+    Parameters->GlintResultTexture = GlintResultRT->GetResource()->GetTextureRHI();
+    Parameters->RenderTargets[0] = FRenderTargetBinding((*Inputs.SceneTextures)->SceneColorTexture, ERenderTargetLoadAction::ELoad);
+
+    TShaderMapRef<FGlintComposePS> PixelShader(GlobalShaderMap);
+    FPixelShaderUtils::AddFullscreenPass(GraphBuilder, GlobalShaderMap, FRDGEventName(TEXT("Glint Compose Pass")), PixelShader, Parameters,
+        Viewport);
+
 }
 
 void FComputeSceneViewExtension::CalcGlintWaterPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap,
