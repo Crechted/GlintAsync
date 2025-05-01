@@ -1,5 +1,6 @@
 ﻿// Copyright Epic Games, Inc. All Rights Reserved.
 #pragma once
+#include "/Engine/Private/ShadingCommon.ush"
 #include "/Engine/Private/Strata/Glint/GlintThirdParty.ush"
 #include "/Engine/Private/BRDF.ush"
 
@@ -71,13 +72,13 @@ SamplerState SceneColorSampler;
 Texture2D NormalTexture1;
 Texture2D NormalTexture2;
 Texture2D GlintParamsTexture;
+Texture2D WorldNormalTexture;
+Texture2D CameraVectorTexture;
 float3 LightVector;
 float2 TextureSize;
 float3 SigmasRho;
 float density;
 
-float3 WorldNormal;
-float3 CameraVector;
 
 RWTexture2D<float3> GlintsResultTexture;
 
@@ -85,7 +86,9 @@ RWTexture2D<float3> GlintsResultTexture;
 void AccumulateGlintWaterModelCompute(uint3 DispatchThreadID : SV_DispatchThreadID, uint3 GroupThreadID : SV_GroupThreadID)
 {
     float2 UV = DispatchThreadID.xy / TextureSize;
-    
+
+    float3 WorldNormal = WorldNormalTexture.SampleLevel(SceneColorSampler, UV, 0).xyz;
+    float3 CameraVector = CameraVectorTexture.SampleLevel(SceneColorSampler, UV, 0).xyz;
 
     const float3x3 WorldToTangent = make_tbn(WorldNormal);
 
@@ -93,12 +96,11 @@ void AccumulateGlintWaterModelCompute(uint3 DispatchThreadID : SV_DispatchThread
     const float3 V = CameraVector;
     const float3 L = LightVector.xyz;
 
-    //const float3 wg = float3(0.0f, 0.0f, 1.0f); //normalize(mul(N, WorldToTangent));
+    const float3 wg = float3(0.0f, 0.0f, 1.0f); //normalize(mul(N, WorldToTangent));
     const float3 wo = normalize(mul(V, WorldToTangent));
     const float3 wi = normalize(mul(L, WorldToTangent));
 
     const float NoV = saturate(abs(dot(N, V)) + 1e-5);
-
 
     float2 Normals1 = NormalTexture1.SampleLevel(SceneColorSampler, UV, 0).xy;
     float3 GlintParams = GlintParamsTexture.SampleLevel(SceneColorSampler, UV, 0).xyz;

@@ -1,3 +1,3 @@
 ﻿#include "ShaderPasses/SceneTextureCS.h"
 
-IMPLEMENT_SHADER_TYPE(, FSomeTextureCS, TEXT("/Plugin/ShaderDirectory/TestShader.usf"), TEXT("AccumulateSomeTextureCompute"), SF_Compute);
+IMPLEMENT_SHADER_TYPE(, FGlintWaterTextureCS, TEXT("/Plugin/ShaderDirectory/GlintWaterCompute.usf"), TEXT("AccumulateGlintWaterModelCompute"), SF_Compute);

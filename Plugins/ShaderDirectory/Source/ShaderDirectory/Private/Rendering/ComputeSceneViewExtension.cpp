@@ -30,7 +30,7 @@
 
 BEGIN_SHADER_PARAMETER_STRUCT(FWaterPassParameters,)
     //SHADER_PARAMETER_RDG_UNIFORM_BUFFER(FOpaqueBasePassUniformParameters, BasePass)
-    SHADER_PARAMETER_STRUCT_INCLUDE(FViewShaderParameters, View)
+    //SHADER_PARAMETER_STRUCT_INCLUDE(FViewShaderParameters, View)
     SHADER_PARAMETER_RDG_UNIFORM_BUFFER(FInstanceCullingGlobalUniforms, InstanceCulling)
     SHADER_PARAMETER_RDG_UNIFORM_BUFFER(FSceneUniformParameters, SceneBuffer)
     RENDER_TARGET_BINDING_SLOTS() // OMSetRenderTarget
@@ -48,22 +48,65 @@ FComputeSceneViewExtension::FComputeSceneViewExtension(const FAutoRegister& Auto
 
 void FComputeSceneViewExtension::SetupView(FSceneViewFamily& InViewFamily, FSceneView& InView)
 {
+    if (!NormalSource)
+        NormalSource = GetDefault<UGlintsSettings>()->NormalSource.LoadSynchronous();
+    if (!NormalSource)
+        UE_LOG(LogTexture, Error, TEXT("No Normal Source ONE found"));
+
+    if (!NormalOneRT)
+        NormalOneRT = GetDefault<UGlintsSettings>()->NormalOneRenderTarget.LoadSynchronous();
+    if (!NormalOneRT)
+        UE_LOG(LogTexture, Error, TEXT("No Render Target for NormalOne found"));
+
+    if (!NormalTwoRT)
+        NormalTwoRT = GetDefault<UGlintsSettings>()->NormalTwoRenderTarget.LoadSynchronous();
+    if (!NormalTwoRT)
+        UE_LOG(LogTexture, Error, TEXT("No Render Target for NormalTwo found"));
+
+    if (!GlintCameraVectorTextureRT)
+        GlintCameraVectorTextureRT = GetDefault<UGlintsSettings>()->CameraVectorTextureTarget.LoadSynchronous();
+    if (!GlintCameraVectorTextureRT)
+        UE_LOG(LogTexture, Error, TEXT("No Glint World Position Texture Target found"));
+
+    if (!GlintWorldNormalTextureRT)
+        GlintWorldNormalTextureRT = GetDefault<UGlintsSettings>()->WorldNormalTextureTarget.LoadSynchronous();
+    if (!GlintWorldNormalTextureRT)
+        UE_LOG(LogTexture, Error, TEXT("No Glint World Normal Texture Target found"));
+
+    if (!GlintResultRT)
+        GlintResultRT = GetDefault<UGlintsSettings>()->ResultGlintTarget.LoadSynchronous();
+    if (!GlintResultRT)
+        UE_LOG(LogTexture, Error, TEXT("No Glint Result Target found"));
+
+    if (!GlintParametersRT)
+        GlintParametersRT = GetDefault<UGlintsSettings>()->GlintParametersTarget.LoadSynchronous();
+    if (!GlintParametersRT)
+        UE_LOG(LogTexture, Error, TEXT("No Glint Parameters RT found"));
+
+    FVector2D ViewportSize = FVector2D(InView.UnscaledViewRect.Width(), InView.UnscaledViewRect.Height());
+    TryResizeRenderTargets(ViewportSize);
 }
 
-void FComputeSceneViewExtension::BeginRenderViewFamily(FSceneViewFamily& InViewFamily)
+void FComputeSceneViewExtension::TryResizeRenderTargets(const FVector2D& ViewportSize)
 {
-    if (!OutputSomeTextureRT) return;
-
-    FVector2D ViewportSize = FVector2D(OutputSomeTextureRT->SizeX, OutputSomeTextureRT->SizeY);
-    if (GEngine && GEngine->GameViewport)
+    if (GlintCameraVectorTextureRT && !(ViewportSize.X == GlintCameraVectorTextureRT->SizeX && ViewportSize.Y == GlintCameraVectorTextureRT
+                                        ->SizeY))
     {
-        GEngine->GameViewport->GetViewportSize(ViewportSize);
+        if (PooledCameraVectorTexturesRT.IsValid()) PooledCameraVectorTexturesRT.SafeRelease();
+        GlintCameraVectorTextureRT->ResizeTarget(ViewportSize.X, ViewportSize.Y);
     }
 
-    if (!(ViewportSize.X == OutputSomeTextureRT->SizeX && ViewportSize.Y == OutputSomeTextureRT->SizeY))
+    if (GlintWorldNormalTextureRT && !(ViewportSize.X == GlintWorldNormalTextureRT->SizeX && ViewportSize.Y == GlintWorldNormalTextureRT->
+                                       SizeY))
     {
-        if (PooledSomeTexturesRT.IsValid()) PooledSomeTexturesRT.SafeRelease();
-        OutputSomeTextureRT->ResizeTarget(ViewportSize.X, ViewportSize.Y);
+        if (PooledWorldNormalTexturesRT.IsValid()) PooledWorldNormalTexturesRT.SafeRelease();
+        GlintWorldNormalTextureRT->ResizeTarget(ViewportSize.X, ViewportSize.Y);
+    }
+
+    if (GlintResultRT && !(ViewportSize.X == GlintResultRT->SizeX && ViewportSize.Y == GlintResultRT->SizeY))
+    {
+        if (PooledGlintResultRT.IsValid()) PooledGlintResultRT.SafeRelease();
+        GlintResultRT->ResizeTarget(ViewportSize.X, ViewportSize.Y);
     }
 }
 
@@ -93,7 +136,7 @@ inline void FComputeSceneViewExtension::PreRenderView_RenderThread(FRDGBuilder& 
 
     const FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(GMaxRHIFeatureLevel);
 
-    constexpr bool bUseAsyncCompute = true;
+    constexpr bool bUseAsyncCompute = false;
     const bool bAsyncCompute = /*GSupportsEfficientAsyncCompute &&*/ (GNumExplicitGPUsForRendering == 1) && bUseAsyncCompute;
 
     CalcNormalOnePass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
@@ -104,74 +147,73 @@ inline void FComputeSceneViewExtension::PreRenderView_RenderThread(FRDGBuilder& 
 void FComputeSceneViewExtension::PostRenderView_RenderThread(FRDGBuilder& GraphBuilder, FSceneView& InView)
 {
     FSceneViewExtensionBase::PostRenderView_RenderThread(GraphBuilder, InView);
+    const FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(GMaxRHIFeatureLevel);
+
+    constexpr bool bUseAsyncCompute = false;
+    const bool bAsyncCompute = /*GSupportsEfficientAsyncCompute &&*/ (GNumExplicitGPUsForRendering == 1) && bUseAsyncCompute;
+
     DrawWaterMesh(GraphBuilder, InView);
+    CalcGlintWaterPass(GraphBuilder, GlobalShaderMap, InView, bAsyncCompute);
 }
 
 void FComputeSceneViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& GraphBuilder, const FSceneView& InView,
     const FPostProcessingInputs& Inputs)
 {
     FSceneViewExtensionBase::PrePostProcessPass_RenderThread(GraphBuilder, InView, Inputs);
-    return;
+}
 
-    if (!OutputSomeTextureRT) return;
-
-    if (!PooledSomeTexturesRT.IsValid())
+void FComputeSceneViewExtension::CalcGlintWaterPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap,
+    FSceneView& InView, bool bAsyncCompute)
+{
+    if (!InView.ViewUniformBuffer.IsValid() && InView.bIsViewInfo)
     {
-        PooledSomeTexturesRT = CreatePooledRenderTarget_RenderThread(OutputSomeTextureRT);
+        if (auto View = static_cast<const FViewInfo*>(&InView))
+        {
+            InView.ViewUniformBuffer = TUniformBufferRef<FViewUniformShaderParameters>::CreateUniformBufferImmediate(
+                *View->CachedViewUniformShaderParameters, UniformBuffer_SingleFrame);
+        }
+        if (!InView.ViewUniformBuffer.IsValid()) return;
     }
 
-    if (!OutputSomeTextureRT) return;
+    if (!GlintResultRT) return;
 
-    if (!PooledSomeTexturesRT.IsValid())
+    if (!PooledGlintResultRT.IsValid())
     {
-        PooledSomeTexturesRT = CreatePooledRenderTarget_RenderThread(OutputSomeTextureRT);
+        PooledGlintResultRT = CreatePooledRenderTarget_RenderThread(GlintResultRT);
     }
-
-    FSceneTextureShaderParameters SceneTextureShaderParameters = CreateSceneTextureShaderParameters(GraphBuilder, InView,
-        ESceneTextureSetupMode::All);
 
     RDG_GPU_STAT_SCOPE(GraphBuilder, NormalCompute);
     RDG_EVENT_SCOPE(GraphBuilder, "SceneTextureCompute FOUR");
 
-    // Needs to be registered every frame
-    FRDGTextureRef RenderTargetTexture = GraphBuilder.RegisterExternalTexture(PooledSomeTexturesRT, TEXT("Bound Render Target"));
+    FRDGTextureRef RenderTargetTexture = GraphBuilder.RegisterExternalTexture(PooledGlintResultRT, TEXT("Bound Render Target"));
 
-    // Since we're rendering to the render target, we're going to use the full size of the render target rather than the screen
     const FIntRect RenderViewport = FIntRect(0, 0, RenderTargetTexture->Desc.Extent.X, RenderTargetTexture->Desc.Extent.Y);
 
     FRDGTextureRef TempTexture = GraphBuilder.CreateTexture(RenderTargetTexture->Desc, TEXT("Temp Texture"));
     FRDGTextureUAVDesc TempUAVDesc = FRDGTextureUAVDesc(TempTexture);
     FRDGTextureUAVRef TempUAV = GraphBuilder.CreateUAV(TempUAVDesc);
 
-    FRDGTextureUAVRef SceneColourTextureUAV = GraphBuilder.CreateUAV((*Inputs.SceneTextures)->SceneColorTexture);
-    //FRDGTextureUAVRef CustomDepthTextureUAV = GraphBuilder.CreateUAV((*Inputs.SceneTextures)->CustomDepthTexture);
-    //FRDGTextureUAVRef SceneDepthTextureUAV = GraphBuilder.CreateUAV((*Inputs.SceneTextures)->SceneDepthTexture);
-    //FRDGTextureUAVRef GBufferATextureUAV = GraphBuilder.CreateUAV((*Inputs.SceneTextures)->GBufferATexture);
-    //FRDGTextureUAVRef GBufferBTextureUAV = GraphBuilder.CreateUAV((*Inputs.SceneTextures)->GBufferBTexture);
-
-    FSomeTextureCS::FParameters* Parameters = GraphBuilder.AllocParameters<FSomeTextureCS::FParameters>();
-    Parameters->TextureSize = RenderTargetTexture->Desc.Extent;
-    Parameters->SceneColorSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
+    FGlintWaterTextureCS::FParameters* Parameters = GraphBuilder.AllocParameters<FGlintWaterTextureCS::FParameters>();
     Parameters->View = InView.ViewUniformBuffer;
-    Parameters->SceneTextures = SceneTextureShaderParameters;
-    //Parameters->SceneColorTexture = SceneColourTextureUAV;
-    Parameters->InputCustomDepthTexture = (*Inputs.SceneTextures)->CustomDepthTexture;
-    Parameters->InputSceneDepthTexture = (*Inputs.SceneTextures)->SceneDepthTexture;
-    Parameters->InputGBufferATexture = (*Inputs.SceneTextures)->GBufferATexture;
-    Parameters->InputGBufferDTexture = (*Inputs.SceneTextures)->GBufferDTexture;
-    Parameters->OutputTexture = TempUAV;
+    Parameters->SceneColorSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
+    Parameters->NormalTexture1 = NormalOneRT->GetResource()->GetTextureRHI();
+    Parameters->NormalTexture2 = NormalTwoRT->GetResource()->GetTextureRHI();
+    Parameters->WorldNormalTexture = GlintWorldNormalTextureRT->GetResource()->GetTextureRHI();
+    Parameters->CameraVectorTexture = GlintCameraVectorTextureRT->GetResource()->GetTextureRHI();
+    Parameters->GlintParamsTexture = GlintParametersRT->GetResource()->GetTextureRHI();
+    Parameters->GlintsResultTexture = TempUAV;
+    Parameters->LightVector = GetDefault<UGlintsSettings>()->LightVector;
+    Parameters->TextureSize = RenderTargetTexture->Desc.Extent;
+    Parameters->SigmasRho = GetDefault<UGlintsSettings>()->SigmasRho;
+    Parameters->density = GetDefault<UGlintsSettings>()->Density;
 
     const FIntPoint ThreadCount = RenderViewport.Size();
     const FIntVector GroupCount = FComputeShaderUtils::GetGroupCount(ThreadCount,
         FIntPoint(GlintParametersCompute::THREADS_X, GlintParametersCompute::THREADS_Y));
 
-    constexpr bool bUseAsyncCompute = true;
-    const bool bAsyncCompute = /*GSupportsEfficientAsyncCompute &&*/ (GNumExplicitGPUsForRendering == 1) && bUseAsyncCompute;
-    const FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(GMaxRHIFeatureLevel);
-
     const ERDGPassFlags PassFlags = bAsyncCompute ? ERDGPassFlags::AsyncCompute : ERDGPassFlags::Compute;
-    FComputeShaderUtils::AddPass(GraphBuilder, RDG_EVENT_NAME("SomeSceneTextureCompute %u", 4221), PassFlags,
-        TShaderMapRef<FSomeTextureCS>(GlobalShaderMap), Parameters, GroupCount);
+    FComputeShaderUtils::AddPass(GraphBuilder, RDG_EVENT_NAME("GlintResultTextureCompute %u", 4221), PassFlags,
+        TShaderMapRef<FGlintWaterTextureCS>(GlobalShaderMap), Parameters, GroupCount);
 
     AddCopyTexturePass(GraphBuilder, TempTexture, RenderTargetTexture);
 }
@@ -180,65 +222,57 @@ void FComputeSceneViewExtension::DrawWaterMesh(FRDGBuilder& GraphBuilder, FScene
 {
     RDG_GPU_STAT_SCOPE(GraphBuilder, NormalCompute);
     RDG_EVENT_SCOPE(GraphBuilder, "Vertex and Pixel Water");
-    if (!OutputSomeTextureRT || !OutputDepthStencilRT) return;
+    if (!GlintCameraVectorTextureRT || !GlintWorldNormalTextureRT) return;
 
-    if (!PooledSomeTexturesRT.IsValid() || !PooledDepthStencilRT.IsValid())
+    if (!PooledCameraVectorTexturesRT.IsValid() || !PooledWorldNormalTexturesRT.IsValid())
     {
-        PooledSomeTexturesRT = CreatePooledRenderTarget_RenderThread(OutputSomeTextureRT);
-        PooledDepthStencilRT = CreatePooledRenderTarget_RenderThread(OutputDepthStencilRT, ETextureCreateFlags::DepthStencilTargetable);
-        if (!PooledSomeTexturesRT || !PooledDepthStencilRT) return;
+        PooledCameraVectorTexturesRT = CreatePooledRenderTarget_RenderThread(GlintCameraVectorTextureRT);
+        PooledWorldNormalTexturesRT = CreatePooledRenderTarget_RenderThread(GlintWorldNormalTextureRT);
+        if (!PooledCameraVectorTexturesRT || !PooledWorldNormalTexturesRT) return;
     }
 
-    if (auto View = static_cast<const FViewInfo*>(&InView))
+    if (InView.bIsViewInfo)
     {
+        auto View = static_cast<const FViewInfo*>(&InView);
         RDG_GPU_MASK_SCOPE(GraphBuilder, View->GPUMask);
 
-        //FRDGTextureRef RenderTargetTexture = GraphBuilder.FindExternalTexture(OutputSomeTextureRT->GetRenderTargetResource()->GetRenderTargetTexture());
-        FRDGTextureRef RenderTargetTexture = GraphBuilder.RegisterExternalTexture(PooledSomeTexturesRT, TEXT("Bound Render Target"));
-        FRDGTextureRef DepthStencilTexture = GraphBuilder.RegisterExternalTexture(PooledDepthStencilRT, TEXT("Bound DepthStencil"));
-
-        //FRDGTextureRef TempTexture = GraphBuilder.CreateTexture(RenderTargetTexture->Desc, TEXT("Temp Texture"));
-
-        //AddCopyTexturePass(GraphBuilder, RenderTargetTexture, TempTexture);
+        FRDGTextureRef CameraVectorTexture = GraphBuilder.RegisterExternalTexture(PooledCameraVectorTexturesRT, TEXT("Bound CameraVector"));
+        FRDGTextureRef NormalTexture = GraphBuilder.RegisterExternalTexture(PooledWorldNormalTexturesRT, TEXT("Bound WorldNormal"));
 
         TStaticArray<FRenderTargetBinding, MaxSimultaneousRenderTargets> Output;
 
-        Output[0] = FRenderTargetBinding(RenderTargetTexture, ERenderTargetLoadAction::ELoad);
-        //Output[0] = FRenderTargetBinding(TempTexture, ERenderTargetLoadAction::EClear);
+        Output[0] = FRenderTargetBinding(CameraVectorTexture, ERenderTargetLoadAction::EClear);
+        Output[1] = FRenderTargetBinding(NormalTexture, ERenderTargetLoadAction::EClear);
 
         FViewShaderParameters Parameters;
         Parameters.View = View->ViewUniformBuffer;
         Parameters.InstancedView = View->GetInstancedViewUniformBuffer();
         // if we're a part of the stereo pair, make sure that the pointer isn't bogus
-        
+
         FWaterPassParameters* PassParameters = GraphBuilder.AllocParameters<FWaterPassParameters>();
+        //PassParameters->View = Parameters;
         PassParameters->RenderTargets.Output = Output;
         PassParameters->InstanceCulling = FInstanceCullingContext::CreateDummyInstanceCullingUniformBuffer(GraphBuilder);
-        PassParameters->View = Parameters;
         PassParameters->SceneBuffer = GetSceneUniformBufferRef(GraphBuilder, *View);
 
-        //FWaterPassParameters* PassParameters = FWaterGlintHelper::CreateWaterPassParameters(GraphBuilder, *View, Output);//CreateOpaqueBasePassUniformBuffer(GraphBuilder, *View);
-
         // Настройка глубины
-        PassParameters->RenderTargets.DepthStencil = FDepthStencilBinding(
-            DepthStencilTexture,
+        /*PassParameters->RenderTargets.DepthStencil = FDepthStencilBinding(
+            DepthTexture,
             ERenderTargetLoadAction::ELoad,
             ERenderTargetLoadAction::ENoAction,
-            FExclusiveDepthStencil::DepthWrite_StencilNop);
+            FExclusiveDepthStencil::DepthWrite_StencilNop);*/
 
         FMeshPassProcessorRenderState PassDrawRenderState;
         PassDrawRenderState.SetBlendState(TStaticBlendStateWriteMask<CW_RGBA, CW_RGBA, CW_RGBA, CW_RGBA>::GetRHI());
 
         //if (PassDrawRenderState.GetDepthStencilAccess() & FExclusiveDepthStencil::DepthWrite)
-        PassDrawRenderState.SetDepthStencilState(TStaticDepthStencilState<true, CF_DepthNearOrEqual>::GetRHI());
+        //PassDrawRenderState.SetDepthStencilState(TStaticDepthStencilState<true, CF_DepthFartherOrEqual>::GetRHI());
         //else
-        //PassDrawRenderState.SetDepthStencilState(TStaticDepthStencilState<false, CF_DepthNearOrEqual>::GetRHI());
+        PassDrawRenderState.SetDepthStencilState(TStaticDepthStencilState<false, CF_DepthFartherOrEqual>::GetRHI());
 
-        // Настройте параметры...
         AddDrawDynamicMeshPass(GraphBuilder, RDG_EVENT_NAME("Vertex and Pixel Water Shader%u", 1), PassParameters, InView, View->ViewRect,
             [View, PassDrawRenderState](FDynamicPassMeshDrawListContext* DynamicMeshPassContext)
             {
-                // Создаем процессор для вашего пасса
                 FWaterMeshPassProcessor PassProcessor(
                     View->Family->Scene->GetRenderScene(),
                     View->FeatureLevel,
@@ -251,12 +285,10 @@ void FComputeSceneViewExtension::DrawWaterMesh(FRDGBuilder& GraphBuilder, FScene
                     {
                         return Proxy->GetTypeHash() == FCustomWaterMeshSceneProxy::WaterTypeHash();
                     });
-                    UE_LOG(LogTemp, Display, TEXT("WaterProxies %d"), WaterProxies.Num());
                     for (auto SceneProxy : WaterProxies)
                     {
                         TArray<FMeshBatch> MeshElements;
                         SceneProxy->GetMeshDescription(0, MeshElements);
-                        UE_LOG(LogTemp, Display, TEXT("Meshes %d"), MeshElements.Num());
                         if (MeshElements.IsEmpty()) continue;
                         const FMeshBatch& Mesh = MeshElements[0];
                         const uint64 DefaultBatchElementMask = ~0ull;
@@ -365,36 +397,6 @@ void FComputeSceneViewExtension::CalcGlintParametersPass(FRDGBuilder& GraphBuild
         TShaderMapRef<FGlintParametersCS>(GlobalShaderMap), Parameters, GroupCount);
 
     AddCopyTexturePass(GraphBuilder, TempTexture, RenderTargetTexture);
-}
-
-void FComputeSceneViewExtension::SetOneRenderTarget(UTextureRenderTarget2D* RenderTarget)
-{
-    NormalOneRT = RenderTarget;
-}
-
-void FComputeSceneViewExtension::SetTwoRenderTarget(UTextureRenderTarget2D* RenderTarget)
-{
-    NormalTwoRT = RenderTarget;
-}
-
-void FComputeSceneViewExtension::SetGlintParametersTarget(UTextureRenderTarget2D* RenderTarget)
-{
-    GlintParametersRT = RenderTarget;
-}
-
-void FComputeSceneViewExtension::SetNormalSource(UTextureRenderTarget2D* RenderTarget)
-{
-    NormalSource = RenderTarget;
-}
-
-void FComputeSceneViewExtension::SetOutputSomeTextureTarget(UTextureRenderTarget2D* RenderTarget)
-{
-    OutputSomeTextureRT = RenderTarget;
-}
-
-void FComputeSceneViewExtension::SetOutputDepthStencilTarget(UTextureRenderTarget2D* RenderTarget)
-{
-    OutputDepthStencilRT = RenderTarget;
 }
 
 TRefCountPtr<IPooledRenderTarget> FComputeSceneViewExtension::CreatePooledRenderTarget_RenderThread(UTextureRenderTarget2D* RenderTarget,

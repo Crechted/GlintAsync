@@ -10,14 +10,16 @@ private:
     TObjectPtr<UTextureRenderTarget2D> NormalOneRT = nullptr;
     TObjectPtr<UTextureRenderTarget2D> NormalTwoRT = nullptr;
     TObjectPtr<UTextureRenderTarget2D> GlintParametersRT = nullptr;
-    TObjectPtr<UTextureRenderTarget2D> OutputSomeTextureRT = nullptr;
-    TObjectPtr<UTextureRenderTarget2D> OutputDepthStencilRT = nullptr;
+    TObjectPtr<UTextureRenderTarget2D> GlintCameraVectorTextureRT = nullptr;
+    TObjectPtr<UTextureRenderTarget2D> GlintWorldNormalTextureRT = nullptr;
+    TObjectPtr<UTextureRenderTarget2D> GlintResultRT = nullptr;
 
     TRefCountPtr<IPooledRenderTarget> PooledNormalOneRT;
     TRefCountPtr<IPooledRenderTarget> PooledNormalTwoRT;
     TRefCountPtr<IPooledRenderTarget> PooledGlintParametersRT;
-    TRefCountPtr<IPooledRenderTarget> PooledSomeTexturesRT;
-    TRefCountPtr<IPooledRenderTarget> PooledDepthStencilRT;
+    TRefCountPtr<IPooledRenderTarget> PooledCameraVectorTexturesRT;
+    TRefCountPtr<IPooledRenderTarget> PooledWorldNormalTexturesRT;
+    TRefCountPtr<IPooledRenderTarget> PooledGlintResultRT;
 
     FRDGTexture* InTexture;
 
@@ -26,14 +28,17 @@ private:
 
 public:
     FComputeSceneViewExtension(const FAutoRegister& AutoRegister);
-    
+
     virtual void SetupViewFamily(FSceneViewFamily& InViewFamily) override
     {
     };
 
     virtual void SetupView(FSceneViewFamily& InViewFamily, FSceneView& InView) override;
+    void TryResizeRenderTargets(const FVector2D& ViewportSizew);
 
-    virtual void BeginRenderViewFamily(FSceneViewFamily& InViewFamily) override;
+    virtual void BeginRenderViewFamily(FSceneViewFamily& InViewFamily) override
+    {
+    }
 
     virtual void PostRenderBasePassDeferred_RenderThread(FRDGBuilder& GraphBuilder, FSceneView& InView,
         const FRenderTargetBindingSlots& RenderTargets, TRDGUniformBufferRef<FSceneTextureUniformParameters> SceneTextures) override
@@ -55,18 +60,12 @@ public:
     {
     };
 
-    void SetOneRenderTarget(UTextureRenderTarget2D* RenderTarget);
-    void SetTwoRenderTarget(UTextureRenderTarget2D* RenderTarget);
-    void SetGlintParametersTarget(UTextureRenderTarget2D* RenderTarget);
-    void SetNormalSource(UTextureRenderTarget2D* RenderTarget);
-    void SetOutputSomeTextureTarget(UTextureRenderTarget2D* RenderTarget);
-    void SetOutputDepthStencilTarget(UTextureRenderTarget2D* RenderTarget);
-
 private:
     void DrawWaterMesh(FRDGBuilder& GraphBuilder, FSceneView& InView);
     void CalcNormalOnePass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, bool bAsyncCompute);
     void CalcNormalTwoPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, bool bAsyncCompute);
     void CalcGlintParametersPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, bool bAsyncCompute);
-    TRefCountPtr<IPooledRenderTarget> CreatePooledRenderTarget_RenderThread(UTextureRenderTarget2D* RenderTarget, ETextureCreateFlags Flags = TexCreate_RenderTargetable | TexCreate_ShaderResource | TexCreate_UAV );
+    void CalcGlintWaterPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, FSceneView& InView, bool bAsyncCompute);
+    TRefCountPtr<IPooledRenderTarget> CreatePooledRenderTarget_RenderThread(UTextureRenderTarget2D* RenderTarget,
+        ETextureCreateFlags Flags = TexCreate_RenderTargetable | TexCreate_ShaderResource | TexCreate_UAV);
 };
-
