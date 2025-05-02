@@ -14,16 +14,17 @@ static constexpr int32 THREADS_Y = 16;
 
 BEGIN_SHADER_PARAMETER_STRUCT(FGlintTextureComputeParams,)
     // Texture type is same as set in shader - for getting the unlit colour
-    SHADER_PARAMETER_SAMPLER(SamplerState, SceneColorSampler)
+    SHADER_PARAMETER_SAMPLER(SamplerState, ClampSampler)
+    SHADER_PARAMETER_SAMPLER(SamplerState, NormalSampler)
     SHADER_PARAMETER_STRUCT_REF(FViewUniformShaderParameters, View)
     //SHADER_PARAMETER_STRUCT_INCLUDE(FSceneTextureShaderParameters, SceneTextures)
 
     //SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float4>, SceneColorTexture)
-    SHADER_PARAMETER_TEXTURE(Texture2D<float4>, NormalTexture1)
-    SHADER_PARAMETER_TEXTURE(Texture2D<float4>, NormalTexture2)
-    SHADER_PARAMETER_TEXTURE(Texture2D<float4>, GlintParamsTexture)
-    SHADER_PARAMETER_TEXTURE(Texture2D<float4>, WorldNormalTexture)
-    SHADER_PARAMETER_TEXTURE(Texture2D<float4>, CameraVectorTexture)
+    SHADER_PARAMETER_RDG_TEXTURE(Texture2D<float4>, NormalTexture1)
+    SHADER_PARAMETER_RDG_TEXTURE(Texture2D<float4>, NormalTexture2)
+    SHADER_PARAMETER_RDG_TEXTURE(Texture2D<float4>, GlintParamsTexture)
+    SHADER_PARAMETER_RDG_TEXTURE(Texture2D<float4>, WorldNormalTexture)
+    SHADER_PARAMETER_RDG_TEXTURE(Texture2D<float4>, CameraVectorTexture)
     SHADER_PARAMETER(FVector3f, LightVector)
     SHADER_PARAMETER(FVector2f, TextureSize)
     SHADER_PARAMETER(FVector3f, SigmasRho)

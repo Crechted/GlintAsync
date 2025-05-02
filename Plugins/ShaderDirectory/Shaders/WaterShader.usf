@@ -28,7 +28,7 @@ void MainVS(FVertexFactoryInput Input, out FWaterMeshPassVSToPS Output)
     Output.FactoryInterpolants = VertexFactoryGetInterpolantsVSToPS(Input, VFIntermediates, VertexParameters);
 
     Output.Position = mul(Output.SavedWorldPosition, ResolvedView.TranslatedWorldToClip);
-    Output.SavedCameraVector.xyz = LWCToFloat(ResolvedView.WorldCameraOrigin).xyz - Output.SavedWorldPosition.xyz;
+    Output.SavedCameraVector.xyz = normalize(LWCToFloat(ResolvedView.WorldCameraOrigin).xyz - Output.SavedWorldPosition.xyz);
 }
 
 // need to be deferred output
@@ -46,35 +46,24 @@ void MainPS(FWaterMeshPassVSToPS Input
     PixelShaderIn.SvPosition = Input.Position;
     PixelShaderIn.bIsFrontFace = true;*/
     FPixelMaterialInputs MaterialInputs;
-    CalcPixelMaterialInputs(MaterialParameters, MaterialInputs);
+    CalcMaterialParametersPost(MaterialParameters, MaterialInputs, Input.Position, true);
 
     FGBufferData GBuffer = (FGBufferData)0;
 
     //GBuffer.PerObjectGBufferData = GetPrimitiveData(MaterialParameters.PrimitiveId).PerObjectGBufferData;
 
-    // final result, now simply use a color
     float3 CameraVector = Input.SavedCameraVector;
-    //float3 CameraVector = MaterialFloat3(Input.SavedWorldPosition.xyz);
-    float3 WorldNormal = MaterialInputs.Normal;
-    float3 BaseColor = MaterialInputs.BaseColor;
+    //float3 CameraVector = normalize(MaterialParameters.CameraVector);
+    float3 WorldNormal = normalize(MaterialInputs.Normal);
+    //float3 WorldNormal = normalize(MaterialParameters.WorldNormal);
     //float3 WorldNormal = EncodeNormal(MaterialParameters.TangentToWorld[2]);
     //float3 WorldNormal = GetMaterialNormal(MaterialParameters, MaterialInputs);
+
     OutTarget0 = float4(CameraVector, 1.0);
     OutTarget1 = float4(WorldNormal, 1.0);
-    /*// normal output
-    OutTarget1.rgb = EncodeNormal( MaterialParameters.TangentToWorld[2] );
-    //OutTarget1.a = GBuffer.PerObjectGBufferData;
- 
-    // metallica/specular/roughness buffer output
-    OutTarget2 = 0;
-    OutTarget2.a = EncodeShadingModelIdAndSelectiveOutputMask(SHADINGMODELID_UNLIT, 0);
- 
-    // base color output, a channel is for AO
-    OutTarget3 = TestColor;
- 
-    // custom data, set this to red for fun
-    OutTarget4 = float4(1, 0, 0, 0);
- 
-    // shadow factor output, now set it to 1 for test only
-    OutTarget5 = 1;*/
 }
+
+/*void CalcPixelMaterialInputs(FMaterialPixelParameters MaterialParameters, FPixelMaterialInputs MaterialInputs)
+{
+    
+}*/

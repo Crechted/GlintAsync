@@ -14,13 +14,14 @@
 #include "ShaderDirectory/GlintsSettings.h"
 #include "ShaderPasses/GlintParametersCS.h"
 #include "ShaderPasses/NormalTwoCS.h"
-#include "ShaderPasses/SceneTextureCS.h"
+#include "ShaderPasses/GlintWaterCS.h"
 #include "MeshPassProcessor.h"
 #include "MeshPassProcessor.inl"
 #include "BasePassRendering.h"
 #include "BasePassRendering.inl"
 //#include "BasePassRendering.cpp"
 
+#include "AssetDefinition.h"
 #include "ScenePrivate.h"
 #include "SceneView.h"
 #include "SceneRendering.h"
@@ -32,6 +33,7 @@
 BEGIN_SHADER_PARAMETER_STRUCT(FWaterPassParameters,)
     //SHADER_PARAMETER_RDG_UNIFORM_BUFFER(FOpaqueBasePassUniformParameters, BasePass)
     //SHADER_PARAMETER_STRUCT_INCLUDE(FViewShaderParameters, View)
+    SHADER_PARAMETER_STRUCT_REF(FViewUniformShaderParameters, View)
     SHADER_PARAMETER_RDG_UNIFORM_BUFFER(FInstanceCullingGlobalUniforms, InstanceCulling)
     SHADER_PARAMETER_RDG_UNIFORM_BUFFER(FSceneUniformParameters, SceneBuffer)
     RENDER_TARGET_BINDING_SLOTS() // OMSetRenderTarget
@@ -116,6 +118,22 @@ inline void FComputeSceneViewExtension::PreRenderView_RenderThread(FRDGBuilder& 
     FSceneViewExtensionBase::PreRenderView_RenderThread(GraphBuilder, InView);
     if (!NormalOneRT || !NormalTwoRT || !NormalSource || !NormalSource->GetResource()) return;
 
+    if (!InView.ViewUniformBuffer.IsValid() && InView.bIsViewInfo)
+    {
+        if (auto View = static_cast<FViewInfo*>(&InView))
+        {
+            FViewUniformShaderParameters UniformShaderParameters;
+            FIntPoint BufferSize = FIntPoint(View->UnscaledViewRect.Width(), View->UnscaledViewRect.Height());
+            View->SetupCommonViewUniformBufferParameters(UniformShaderParameters, BufferSize, 0, View->ViewRect, View->ViewMatrices,
+                View->PrevViewInfo.ViewMatrices);
+            View->ViewUniformBuffer = TUniformBufferRef<FViewUniformShaderParameters>::CreateUniformBufferImmediate(UniformShaderParameters,
+                UniformBuffer_SingleFrame);
+            //View->SetupDefaultGlobalDistanceFieldUniformBufferParameters(UniformShaderParameters);
+            //CreateViewUniformBuffers(*View, UniformShaderParameters);
+        }
+        if (!InView.ViewUniformBuffer.IsValid()) return;
+    }
+
     if (!PooledNormalOneRT.IsValid())
     {
         // Only needs to be done once
@@ -152,7 +170,6 @@ void FComputeSceneViewExtension::PostRenderView_RenderThread(FRDGBuilder& GraphB
 
     constexpr bool bUseAsyncCompute = false;
     const bool bAsyncCompute = /*GSupportsEfficientAsyncCompute &&*/ (GNumExplicitGPUsForRendering == 1) && bUseAsyncCompute;
-
     DrawWaterMesh(GraphBuilder, InView);
     CalcGlintWaterPass(GraphBuilder, GlobalShaderMap, InView, bAsyncCompute);
 }
@@ -162,59 +179,43 @@ void FComputeSceneViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& Gr
 {
     FSceneViewExtensionBase::PrePostProcessPass_RenderThread(GraphBuilder, InView, Inputs);
 
-    if (!PooledGlintResultRT.IsValid())
-    {
-        PooledGlintResultRT = CreatePooledRenderTarget_RenderThread(GlintResultRT);
-    }
-
-    RDG_GPU_STAT_SCOPE(GraphBuilder, NormalCompute);
-    RDG_EVENT_SCOPE(GraphBuilder, "SceneTextureCompute FOUR");
-
-    const FIntRect Viewport = static_cast<const FViewInfo&>(InView).ViewRect;
-    const FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(GMaxRHIFeatureLevel);
-
-    const FSceneTextureShaderParameters SceneTextures = CreateSceneTextureShaderParameters(GraphBuilder, InView,
-        ESceneTextureSetupMode::SceneColor | ESceneTextureSetupMode::GBuffers);
-
-    const FScreenPassTexture SceneColourTexture((*Inputs.SceneTextures)->SceneColorTexture, Viewport);
-
-    FGlintComposePS::FParameters* Parameters = GraphBuilder.AllocParameters<FGlintComposePS::FParameters>();
-    Parameters->SceneColorTexture = SceneColourTexture.Texture;
-    Parameters->SceneTextures = SceneTextures;
-    Parameters->View = InView.ViewUniformBuffer;
-    Parameters->GlintResultTexture = GlintResultRT->GetResource()->GetTextureRHI();
-    Parameters->RenderTargets[0] = FRenderTargetBinding((*Inputs.SceneTextures)->SceneColorTexture, ERenderTargetLoadAction::ELoad);
-
-    TShaderMapRef<FGlintComposePS> PixelShader(GlobalShaderMap);
-    FPixelShaderUtils::AddFullscreenPass(GraphBuilder, GlobalShaderMap, FRDGEventName(TEXT("Glint Compose Pass")), PixelShader, Parameters,
-        Viewport);
-
+    GlintCompose(GraphBuilder, InView, Inputs);
 }
 
 void FComputeSceneViewExtension::CalcGlintWaterPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap,
     FSceneView& InView, bool bAsyncCompute)
 {
-    if (!InView.ViewUniformBuffer.IsValid() && InView.bIsViewInfo)
-    {
-        if (auto View = static_cast<const FViewInfo*>(&InView))
-        {
-            InView.ViewUniformBuffer = TUniformBufferRef<FViewUniformShaderParameters>::CreateUniformBufferImmediate(
-                *View->CachedViewUniformShaderParameters, UniformBuffer_SingleFrame);
-        }
-        if (!InView.ViewUniformBuffer.IsValid()) return;
-    }
-
     if (!GlintResultRT) return;
 
-    if (!PooledGlintResultRT.IsValid())
-    {
-        PooledGlintResultRT = CreatePooledRenderTarget_RenderThread(GlintResultRT);
-    }
+    PooledGlintResultRT = PooledGlintResultRT.IsValid() ? PooledGlintResultRT : CreatePooledRenderTarget_RenderThread(GlintResultRT);
 
-    RDG_GPU_STAT_SCOPE(GraphBuilder, NormalCompute);
-    RDG_EVENT_SCOPE(GraphBuilder, "SceneTextureCompute FOUR");
+    PooledNormalOneRT = PooledNormalOneRT.IsValid() ? PooledNormalOneRT : CreatePooledRenderTarget_RenderThread(NormalOneRT);
+    PooledNormalTwoRT = PooledNormalTwoRT.IsValid() ? PooledNormalTwoRT : CreatePooledRenderTarget_RenderThread(NormalTwoRT);
+    PooledWorldNormalTexturesRT = PooledWorldNormalTexturesRT.IsValid()
+                                      ? PooledWorldNormalTexturesRT
+                                      : CreatePooledRenderTarget_RenderThread(GlintWorldNormalTextureRT);
+    PooledCameraVectorTexturesRT = PooledCameraVectorTexturesRT.IsValid()
+                                       ? PooledCameraVectorTexturesRT
+                                       : CreatePooledRenderTarget_RenderThread(GlintCameraVectorTextureRT);
+    PooledGlintParametersRT = PooledGlintParametersRT.IsValid()
+                                  ? PooledGlintParametersRT
+                                  : CreatePooledRenderTarget_RenderThread(GlintParametersRT);
+
+    if (!PooledGlintResultRT || !PooledNormalOneRT || !PooledNormalTwoRT || !PooledWorldNormalTexturesRT || !PooledCameraVectorTexturesRT ||
+        !PooledGlintParametersRT)
+
+        RDG_GPU_STAT_SCOPE(GraphBuilder, NormalCompute);
+    RDG_EVENT_SCOPE(GraphBuilder, "Glints Compute FOUR");
 
     FRDGTextureRef RenderTargetTexture = GraphBuilder.RegisterExternalTexture(PooledGlintResultRT, TEXT("Bound Render Target"));
+
+    FRDGTextureRef RDGNormalOneRT = GraphBuilder.RegisterExternalTexture(PooledNormalOneRT, TEXT("Bound Render Target"));
+    FRDGTextureRef RDGNormalTwoRT = GraphBuilder.RegisterExternalTexture(PooledNormalTwoRT, TEXT("Bound Render Target"));
+    FRDGTextureRef RDGGlintWorldNormalTextureRT = GraphBuilder.RegisterExternalTexture(PooledWorldNormalTexturesRT,
+        TEXT("Bound Render Target"));
+    FRDGTextureRef RDGGlintCameraVectorTextureRT = GraphBuilder.RegisterExternalTexture(PooledCameraVectorTexturesRT,
+        TEXT("Bound Render Target"));
+    FRDGTextureRef RDGGlintParametersRT = GraphBuilder.RegisterExternalTexture(PooledGlintParametersRT, TEXT("Bound Render Target"));
 
     const FIntRect RenderViewport = FIntRect(0, 0, RenderTargetTexture->Desc.Extent.X, RenderTargetTexture->Desc.Extent.Y);
 
@@ -224,12 +225,18 @@ void FComputeSceneViewExtension::CalcGlintWaterPass(FRDGBuilder& GraphBuilder, c
 
     FGlintWaterTextureCS::FParameters* Parameters = GraphBuilder.AllocParameters<FGlintWaterTextureCS::FParameters>();
     Parameters->View = InView.ViewUniformBuffer;
-    Parameters->SceneColorSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
-    Parameters->NormalTexture1 = NormalOneRT->GetResource()->GetTextureRHI();
+    Parameters->ClampSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
+    Parameters->NormalSampler = TStaticSamplerState<SF_Bilinear, AM_Wrap, AM_Wrap, AM_Wrap>::GetRHI();
+    /*Parameters->NormalTexture1 = NormalOneRT->GetResource()->GetTextureRHI();
     Parameters->NormalTexture2 = NormalTwoRT->GetResource()->GetTextureRHI();
     Parameters->WorldNormalTexture = GlintWorldNormalTextureRT->GetResource()->GetTextureRHI();
     Parameters->CameraVectorTexture = GlintCameraVectorTextureRT->GetResource()->GetTextureRHI();
-    Parameters->GlintParamsTexture = GlintParametersRT->GetResource()->GetTextureRHI();
+    Parameters->GlintParamsTexture = GlintParametersRT->GetResource()->GetTextureRHI();*/
+    Parameters->NormalTexture1 = RDGNormalOneRT;
+    Parameters->NormalTexture2 = RDGNormalTwoRT;
+    Parameters->WorldNormalTexture = RDGGlintWorldNormalTextureRT;
+    Parameters->CameraVectorTexture = RDGGlintCameraVectorTextureRT;
+    Parameters->GlintParamsTexture = RDGGlintParametersRT;
     Parameters->GlintsResultTexture = TempUAV;
     Parameters->LightVector = GetDefault<UGlintsSettings>()->LightVector;
     Parameters->TextureSize = RenderTargetTexture->Desc.Extent;
@@ -240,7 +247,7 @@ void FComputeSceneViewExtension::CalcGlintWaterPass(FRDGBuilder& GraphBuilder, c
     const FIntVector GroupCount = FComputeShaderUtils::GetGroupCount(ThreadCount,
         FIntPoint(GlintParametersCompute::THREADS_X, GlintParametersCompute::THREADS_Y));
 
-    const ERDGPassFlags PassFlags = bAsyncCompute ? ERDGPassFlags::AsyncCompute : ERDGPassFlags::Compute;
+    const ERDGPassFlags PassFlags = /*bAsyncCompute ? ERDGPassFlags::AsyncCompute :*/ ERDGPassFlags::Compute;
     FComputeShaderUtils::AddPass(GraphBuilder, RDG_EVENT_NAME("GlintResultTextureCompute %u", 4221), PassFlags,
         TShaderMapRef<FGlintWaterTextureCS>(GlobalShaderMap), Parameters, GroupCount);
 
@@ -260,7 +267,7 @@ void FComputeSceneViewExtension::DrawWaterMesh(FRDGBuilder& GraphBuilder, FScene
         if (!PooledCameraVectorTexturesRT || !PooledWorldNormalTexturesRT) return;
     }
 
-    if (InView.bIsViewInfo)
+    if (InView.bIsViewInfo && InView.ViewUniformBuffer.IsValid())
     {
         auto View = static_cast<const FViewInfo*>(&InView);
         RDG_GPU_MASK_SCOPE(GraphBuilder, View->GPUMask);
@@ -273,13 +280,13 @@ void FComputeSceneViewExtension::DrawWaterMesh(FRDGBuilder& GraphBuilder, FScene
         Output[0] = FRenderTargetBinding(CameraVectorTexture, ERenderTargetLoadAction::EClear);
         Output[1] = FRenderTargetBinding(NormalTexture, ERenderTargetLoadAction::EClear);
 
-        FViewShaderParameters Parameters;
+        /*FViewShaderParameters Parameters;
         Parameters.View = View->ViewUniformBuffer;
-        Parameters.InstancedView = View->GetInstancedViewUniformBuffer();
+        Parameters.InstancedView = View->GetInstancedViewUniformBuffer();*/
         // if we're a part of the stereo pair, make sure that the pointer isn't bogus
 
         FWaterPassParameters* PassParameters = GraphBuilder.AllocParameters<FWaterPassParameters>();
-        //PassParameters->View = Parameters;
+        PassParameters->View = View->ViewUniformBuffer;
         PassParameters->RenderTargets.Output = Output;
         PassParameters->InstanceCulling = FInstanceCullingContext::CreateDummyInstanceCullingUniformBuffer(GraphBuilder);
         PassParameters->SceneBuffer = GetSceneUniformBufferRef(GraphBuilder, *View);
@@ -426,6 +433,36 @@ void FComputeSceneViewExtension::CalcGlintParametersPass(FRDGBuilder& GraphBuild
         TShaderMapRef<FGlintParametersCS>(GlobalShaderMap), Parameters, GroupCount);
 
     AddCopyTexturePass(GraphBuilder, TempTexture, RenderTargetTexture);
+}
+
+void FComputeSceneViewExtension::GlintCompose(FRDGBuilder& GraphBuilder, const FSceneView& InView, const FPostProcessingInputs& Inputs)
+{
+    if (!PooledGlintResultRT.IsValid())
+    {
+        PooledGlintResultRT = CreatePooledRenderTarget_RenderThread(GlintResultRT);
+    }
+
+    RDG_GPU_STAT_SCOPE(GraphBuilder, NormalCompute);
+    RDG_EVENT_SCOPE(GraphBuilder, "SceneTextureCompute FOUR");
+
+    const FIntRect Viewport = static_cast<const FViewInfo&>(InView).ViewRect;
+    const FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(GMaxRHIFeatureLevel);
+
+    const FSceneTextureShaderParameters SceneTextures = CreateSceneTextureShaderParameters(GraphBuilder, InView,
+        ESceneTextureSetupMode::SceneColor | ESceneTextureSetupMode::GBuffers);
+
+    const FScreenPassTexture SceneColourTexture((*Inputs.SceneTextures)->SceneColorTexture, Viewport);
+
+    FGlintComposePS::FParameters* Parameters = GraphBuilder.AllocParameters<FGlintComposePS::FParameters>();
+    Parameters->SceneColorTexture = SceneColourTexture.Texture;
+    Parameters->SceneTextures = SceneTextures;
+    Parameters->View = InView.ViewUniformBuffer;
+    Parameters->GlintResultTexture = GlintResultRT->GetResource()->GetTextureRHI();
+    Parameters->RenderTargets[0] = FRenderTargetBinding((*Inputs.SceneTextures)->SceneColorTexture, ERenderTargetLoadAction::ELoad);
+
+    TShaderMapRef<FGlintComposePS> PixelShader(GlobalShaderMap);
+    FPixelShaderUtils::AddFullscreenPass(GraphBuilder, GlobalShaderMap, FRDGEventName(TEXT("Glint Compose Pass")), PixelShader, Parameters,
+        Viewport);
 }
 
 TRefCountPtr<IPooledRenderTarget> FComputeSceneViewExtension::CreatePooledRenderTarget_RenderThread(UTextureRenderTarget2D* RenderTarget,

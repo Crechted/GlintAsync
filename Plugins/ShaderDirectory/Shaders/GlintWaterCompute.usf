@@ -67,7 +67,8 @@ float3x3 make_tbn(float3 n)
     return float3x3(t, b, n);
 }
 
-SamplerState SceneColorSampler;
+SamplerState ClampSampler;
+SamplerState NormalSampler;
 
 Texture2D NormalTexture1;
 Texture2D NormalTexture2;
@@ -85,34 +86,38 @@ RWTexture2D<float3> GlintsResultTexture;
 [numthreads(THREADS_X, THREADS_Y, 1)]
 void AccumulateGlintWaterModelCompute(uint3 DispatchThreadID : SV_DispatchThreadID, uint3 GroupThreadID : SV_GroupThreadID)
 {
+    //if (DispatchThreadID.x < TextureSize.x && DispatchThreadID.y < TextureSize.y)
+    //{
     float2 UV = DispatchThreadID.xy / TextureSize;
 
-    float3 WorldNormal = WorldNormalTexture.SampleLevel(SceneColorSampler, UV, 0).xyz;
-    float3 CameraVector = CameraVectorTexture.SampleLevel(SceneColorSampler, UV, 0).xyz;
+    float3 WorldNormal = WorldNormalTexture.SampleLevel(ClampSampler, UV, 0).xyz;
+    //float3 WorldNormal = WorldNormalTexture.Load(int3(DispatchThreadID.xy, 0)).xyz;
+    float3 CameraVector = CameraVectorTexture.SampleLevel(ClampSampler, UV, 0).xyz;
+    //float3 CameraVector = CameraVectorTexture.Load(int3(DispatchThreadID.xy, 0)).xyz;
 
     const float3x3 WorldToTangent = make_tbn(WorldNormal);
 
     const float3 N = WorldNormal;
     const float3 V = CameraVector;
-    const float3 L = LightVector.xyz;
+    const float3 L = normalize(LightVector).xyz;
 
-    const float3 wg = float3(0.0f, 0.0f, 1.0f); //normalize(mul(N, WorldToTangent));
+    const float3 wg = /*float3(0.0f, 0.0f, 1.0f); //*/normalize(mul(N, WorldToTangent));
     const float3 wo = normalize(mul(V, WorldToTangent));
     const float3 wi = normalize(mul(L, WorldToTangent));
 
     const float NoV = saturate(abs(dot(N, V)) + 1e-5);
 
-    float2 Normals1 = NormalTexture1.SampleLevel(SceneColorSampler, UV, 0).xy;
-    float3 GlintParams = GlintParamsTexture.SampleLevel(SceneColorSampler, UV, 0).xyz;
+    float2 Normals1 = NormalTexture1.SampleLevel(NormalSampler, UV, 0).xy;
+    float3 GlintParams = GlintParamsTexture.SampleLevel(NormalSampler, UV, 0).xyz;
 
     float sigma_x = GlintParams.x;
     float sigma_y = GlintParams.y;
     float rho = GlintParams.z;
-    float3 wn = float3(-Normals1.x, -Normals1.y, 1.) / sqrt(1 + Normals1.x * Normals1.x + Normals1.y * Normals1.y);
 
     float D = f_P(wo, wi, float3(sigma_x, sigma_y, rho), density, UV, ddx(UV), ddy(UV), false);
 
     float3 wh = normalize(wo + wi);
+    float3 wn = float3(-Normals1.x, -Normals1.y, 1.) / sqrt(1 + Normals1.x * Normals1.x + Normals1.y * Normals1.y);
 
     float projected_area = clamp(dot(wn, wo) / dot(wn, wg), 1., 1000000000.);
 
@@ -132,5 +137,7 @@ void AccumulateGlintWaterModelCompute(uint3 DispatchThreadID : SV_DispatchThread
     float3 F = F_Schlick(float3(1, 1, 1), NoV);
 
     float3 GlintRes = slope_projected_area.z * (F * G * D) / 4.;
+
     GlintsResultTexture[DispatchThreadID.xy] = GlintRes;
+    //}
 }
