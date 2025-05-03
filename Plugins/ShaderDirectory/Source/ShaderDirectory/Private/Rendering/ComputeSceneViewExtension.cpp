@@ -131,7 +131,9 @@ inline void FComputeSceneViewExtension::PreRenderView_RenderThread(FRDGBuilder& 
             //View->SetupDefaultGlobalDistanceFieldUniformBufferParameters(UniformShaderParameters);
             //CreateViewUniformBuffers(*View, UniformShaderParameters);
         }
-        if (!InView.ViewUniformBuffer.IsValid()) return;
+
+        //GEngine->LoadBlueNoiseTexture();
+        //GEngine->LoadGlintTextures();
     }
 
     if (!PooledNormalOneRT.IsValid())
@@ -166,6 +168,7 @@ inline void FComputeSceneViewExtension::PreRenderView_RenderThread(FRDGBuilder& 
 void FComputeSceneViewExtension::PostRenderView_RenderThread(FRDGBuilder& GraphBuilder, FSceneView& InView)
 {
     FSceneViewExtensionBase::PostRenderView_RenderThread(GraphBuilder, InView);
+
     const FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(GMaxRHIFeatureLevel);
 
     constexpr bool bUseAsyncCompute = false;
@@ -183,9 +186,9 @@ void FComputeSceneViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& Gr
 }
 
 void FComputeSceneViewExtension::CalcGlintWaterPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap,
-    FSceneView& InView, bool bAsyncCompute)
+    const FSceneView& InView, bool bAsyncCompute)
 {
-    if (!GlintResultRT) return;
+    if (!GlintResultRT || !GetDefault<UGlintsSettings>()->bCalcGlints) return;
 
     PooledGlintResultRT = PooledGlintResultRT.IsValid() ? PooledGlintResultRT : CreatePooledRenderTarget_RenderThread(GlintResultRT);
 
@@ -203,8 +206,9 @@ void FComputeSceneViewExtension::CalcGlintWaterPass(FRDGBuilder& GraphBuilder, c
 
     if (!PooledGlintResultRT || !PooledNormalOneRT || !PooledNormalTwoRT || !PooledWorldNormalTexturesRT || !PooledCameraVectorTexturesRT ||
         !PooledGlintParametersRT)
+        return;
 
-        RDG_GPU_STAT_SCOPE(GraphBuilder, NormalCompute);
+    RDG_GPU_STAT_SCOPE(GraphBuilder, NormalCompute);
     RDG_EVENT_SCOPE(GraphBuilder, "Glints Compute FOUR");
 
     FRDGTextureRef RenderTargetTexture = GraphBuilder.RegisterExternalTexture(PooledGlintResultRT, TEXT("Bound Render Target"));
@@ -254,7 +258,7 @@ void FComputeSceneViewExtension::CalcGlintWaterPass(FRDGBuilder& GraphBuilder, c
     AddCopyTexturePass(GraphBuilder, TempTexture, RenderTargetTexture);
 }
 
-void FComputeSceneViewExtension::DrawWaterMesh(FRDGBuilder& GraphBuilder, FSceneView& InView)
+void FComputeSceneViewExtension::DrawWaterMesh(FRDGBuilder& GraphBuilder, const FSceneView& InView)
 {
     RDG_GPU_STAT_SCOPE(GraphBuilder, NormalCompute);
     RDG_EVENT_SCOPE(GraphBuilder, "Vertex and Pixel Water");
@@ -437,7 +441,7 @@ void FComputeSceneViewExtension::CalcGlintParametersPass(FRDGBuilder& GraphBuild
 
 void FComputeSceneViewExtension::GlintCompose(FRDGBuilder& GraphBuilder, const FSceneView& InView, const FPostProcessingInputs& Inputs)
 {
-    if (!PooledGlintResultRT.IsValid())
+    if (!PooledGlintResultRT.IsValid() || !GetDefault<UGlintsSettings>()->bComposeGlints)
     {
         PooledGlintResultRT = CreatePooledRenderTarget_RenderThread(GlintResultRT);
     }

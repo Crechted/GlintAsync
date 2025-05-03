@@ -43,4 +43,10 @@ public:
     
     UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Parameters")
     float Density;
+    
+    UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Parameters")
+    bool bCalcGlints = true;
+    
+    UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Parameters")
+    bool bComposeGlints = true;
 };

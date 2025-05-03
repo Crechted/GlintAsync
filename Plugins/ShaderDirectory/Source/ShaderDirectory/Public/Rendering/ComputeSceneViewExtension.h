@@ -61,11 +61,11 @@ public:
     };
 
 private:
-    void DrawWaterMesh(FRDGBuilder& GraphBuilder, FSceneView& InView);
+    void DrawWaterMesh(FRDGBuilder& GraphBuilder, const FSceneView& InView);
     void CalcNormalOnePass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, bool bAsyncCompute);
     void CalcNormalTwoPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, bool bAsyncCompute);
     void CalcGlintParametersPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, bool bAsyncCompute);
-    void CalcGlintWaterPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, FSceneView& InView, bool bAsyncCompute);
+    void CalcGlintWaterPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, const FSceneView& InView, bool bAsyncCompute);
     void GlintCompose(FRDGBuilder& GraphBuilder, const FSceneView& InView, const FPostProcessingInputs& Inputs);
     TRefCountPtr<IPooledRenderTarget> CreatePooledRenderTarget_RenderThread(UTextureRenderTarget2D* RenderTarget,
         ETextureCreateFlags Flags = TexCreate_RenderTargetable | TexCreate_ShaderResource | TexCreate_UAV);

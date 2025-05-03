@@ -90,15 +90,16 @@ void AccumulateGlintWaterModelCompute(uint3 DispatchThreadID : SV_DispatchThread
     //{
     float2 UV = DispatchThreadID.xy / TextureSize;
 
-    float3 WorldNormal = WorldNormalTexture.SampleLevel(ClampSampler, UV, 0).xyz;
+    float4 WorldNormal = WorldNormalTexture.SampleLevel(ClampSampler, UV, 0);
     //float3 WorldNormal = WorldNormalTexture.Load(int3(DispatchThreadID.xy, 0)).xyz;
-    float3 CameraVector = CameraVectorTexture.SampleLevel(ClampSampler, UV, 0).xyz;
+    float4 CameraVector = CameraVectorTexture.SampleLevel(ClampSampler, UV, 0);
     //float3 CameraVector = CameraVectorTexture.Load(int3(DispatchThreadID.xy, 0)).xyz;
 
+    float2 MatUV = float2(CameraVector.w, WorldNormal.w);
     const float3x3 WorldToTangent = make_tbn(WorldNormal);
 
-    const float3 N = WorldNormal;
-    const float3 V = CameraVector;
+    const float3 N = WorldNormal.xyz;
+    const float3 V = CameraVector.xyz;
     const float3 L = normalize(LightVector).xyz;
 
     const float3 wg = /*float3(0.0f, 0.0f, 1.0f); //*/normalize(mul(N, WorldToTangent));
@@ -107,14 +108,14 @@ void AccumulateGlintWaterModelCompute(uint3 DispatchThreadID : SV_DispatchThread
 
     const float NoV = saturate(abs(dot(N, V)) + 1e-5);
 
-    float2 Normals1 = NormalTexture1.SampleLevel(NormalSampler, UV, 0).xy;
-    float3 GlintParams = GlintParamsTexture.SampleLevel(NormalSampler, UV, 0).xyz;
+    float2 Normals1 = NormalTexture1.SampleLevel(NormalSampler, MatUV, 0).xy;
+    float3 GlintParams = GlintParamsTexture.SampleLevel(NormalSampler, MatUV, 0).xyz;
 
     float sigma_x = GlintParams.x;
     float sigma_y = GlintParams.y;
     float rho = GlintParams.z;
 
-    float D = f_P(wo, wi, float3(sigma_x, sigma_y, rho), density, UV, ddx(UV), ddy(UV), false);
+    float D = f_P(wo, wi, float3(sigma_x, sigma_y, rho), density, MatUV, ddx(MatUV), ddy(MatUV), false);
 
     float3 wh = normalize(wo + wi);
     float3 wn = float3(-Normals1.x, -Normals1.y, 1.) / sqrt(1 + Normals1.x * Normals1.x + Normals1.y * Normals1.y);

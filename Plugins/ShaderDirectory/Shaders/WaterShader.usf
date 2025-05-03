@@ -1,8 +1,9 @@
-﻿#include "/Engine/Private/Common.ush"
+﻿//#define NUM_TEX_COORD_INTERPOLATORS 1
+//#define NUM_MATERIAL_TEXCOORDS_VERTEX 1
+#include "/Engine/Private/Common.ush"
 #include "/Engine/Generated/Material.ush"
 #include "/Engine/Generated/VertexFactory.ush"
 #include "/Engine/Private/DeferredShadingCommon.ush"
-
 struct FWaterMeshPassVSToPS
 {
     FVertexFactoryInterpolantsVSToPS FactoryInterpolants;
@@ -24,8 +25,9 @@ void MainVS(FVertexFactoryInput Input, out FWaterMeshPassVSToPS Output)
     {
         Output.SavedWorldPosition.xyz += GetMaterialWorldPositionOffset(VertexParameters);
     }
-
     Output.FactoryInterpolants = VertexFactoryGetInterpolantsVSToPS(Input, VFIntermediates, VertexParameters);
+    //Output.SavedTexCoords = float(); // Или другой канал
+    //Output.FactoryInterpolants.TexCoords[0] = Input.TexCoords0;
 
     Output.Position = mul(Output.SavedWorldPosition, ResolvedView.TranslatedWorldToClip);
     Output.SavedCameraVector.xyz = normalize(LWCToFloat(ResolvedView.WorldCameraOrigin).xyz - Output.SavedWorldPosition.xyz);
@@ -34,36 +36,21 @@ void MainVS(FVertexFactoryInput Input, out FWaterMeshPassVSToPS Output)
 // need to be deferred output
 void MainPS(FWaterMeshPassVSToPS Input
     , out float4 OutTarget0 : SV_Target0
-    , out float4 OutTarget1 : SV_Target1
-    /*, out float4 OutTarget2 : SV_Target2
-    , out float4 OutTarget3 : SV_Target3
-    , out float4 OutTarget4 : SV_Target4
-    , out float4 OutTarget5 : SV_Target5*/)
+    , out float4 OutTarget1 : SV_Target1)
 {
     FMaterialPixelParameters MaterialParameters = GetMaterialPixelParameters(Input.FactoryInterpolants, Input.Position);
 
-    /*FPixelShaderIn PixelShaderIn = (FPixelShaderIn)0;
-    PixelShaderIn.SvPosition = Input.Position;
-    PixelShaderIn.bIsFrontFace = true;*/
     FPixelMaterialInputs MaterialInputs;
     CalcMaterialParametersPost(MaterialParameters, MaterialInputs, Input.Position, true);
 
-    FGBufferData GBuffer = (FGBufferData)0;
-
-    //GBuffer.PerObjectGBufferData = GetPrimitiveData(MaterialParameters.PrimitiveId).PerObjectGBufferData;
-
-    float3 CameraVector = Input.SavedCameraVector;
-    //float3 CameraVector = normalize(MaterialParameters.CameraVector);
+    float3 CameraVector = Input.SavedCameraVector.xyz;
     float3 WorldNormal = normalize(MaterialInputs.Normal);
-    //float3 WorldNormal = normalize(MaterialParameters.WorldNormal);
-    //float3 WorldNormal = EncodeNormal(MaterialParameters.TangentToWorld[2]);
-    //float3 WorldNormal = GetMaterialNormal(MaterialParameters, MaterialInputs);
+    //float2 TexCoord = Input.SavedTexCoords.xy;
+    float2 TexCoord = 0;
+#if NUM_TEX_COORD_INTERPOLATORS
+    TexCoord = MaterialParameters.TexCoords[0];
+#endif
 
-    OutTarget0 = float4(CameraVector, 1.0);
-    OutTarget1 = float4(WorldNormal, 1.0);
+    OutTarget0 = float4(CameraVector, TexCoord.x);
+    OutTarget1 = float4(WorldNormal, TexCoord.y);
 }
-
-/*void CalcPixelMaterialInputs(FMaterialPixelParameters MaterialParameters, FPixelMaterialInputs MaterialInputs)
-{
-    
-}*/

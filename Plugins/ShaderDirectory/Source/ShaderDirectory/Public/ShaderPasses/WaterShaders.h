@@ -19,6 +19,7 @@ public:
 
     FWaterSimulatePassVS() = default;
 
+
     FWaterSimulatePassVS(const ShaderMetaType::CompiledShaderInitializerType& Initializer)
         : FMeshMaterialShader(Initializer)
     {
@@ -35,7 +36,6 @@ public:
     {
         return true;
     }
-
     FWaterSimulatePassPS() = default;
 
     FWaterSimulatePassPS(const ShaderMetaType::CompiledShaderInitializerType& Initializer)
