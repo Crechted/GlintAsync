@@ -12,6 +12,8 @@ private:
     TObjectPtr<UTextureRenderTarget2D> GlintParametersRT = nullptr;
     TObjectPtr<UTextureRenderTarget2D> GlintCameraVectorTextureRT = nullptr;
     TObjectPtr<UTextureRenderTarget2D> GlintWorldNormalTextureRT = nullptr;
+    TObjectPtr<UTextureRenderTarget2D> WaterDDTexCoordRT = nullptr;
+    TObjectPtr<UTextureRenderTarget2D> SurfaceColorRT = nullptr;
     TObjectPtr<UTextureRenderTarget2D> GlintResultRT = nullptr;
 
     TRefCountPtr<IPooledRenderTarget> PooledNormalOneRT;
@@ -19,6 +21,8 @@ private:
     TRefCountPtr<IPooledRenderTarget> PooledGlintParametersRT;
     TRefCountPtr<IPooledRenderTarget> PooledCameraVectorTexturesRT;
     TRefCountPtr<IPooledRenderTarget> PooledWorldNormalTexturesRT;
+    TRefCountPtr<IPooledRenderTarget> PooledWaterDDTexCoordRT;
+    TRefCountPtr<IPooledRenderTarget> PooledSurfaceColorRT;
     TRefCountPtr<IPooledRenderTarget> PooledGlintResultRT;
 
     FRDGTexture* InTexture;

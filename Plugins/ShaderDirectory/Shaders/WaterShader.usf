@@ -4,6 +4,7 @@
 #include "/Engine/Generated/Material.ush"
 #include "/Engine/Generated/VertexFactory.ush"
 #include "/Engine/Private/DeferredShadingCommon.ush"
+
 struct FWaterMeshPassVSToPS
 {
     FVertexFactoryInterpolantsVSToPS FactoryInterpolants;
@@ -36,7 +37,9 @@ void MainVS(FVertexFactoryInput Input, out FWaterMeshPassVSToPS Output)
 // need to be deferred output
 void MainPS(FWaterMeshPassVSToPS Input
     , out float4 OutTarget0 : SV_Target0
-    , out float4 OutTarget1 : SV_Target1)
+    , out float4 OutTarget1 : SV_Target1
+    , out float4 OutTarget2 : SV_Target2
+    , out float4 OutTarget3 : SV_Target3)
 {
     FMaterialPixelParameters MaterialParameters = GetMaterialPixelParameters(Input.FactoryInterpolants, Input.Position);
 
@@ -45,12 +48,17 @@ void MainPS(FWaterMeshPassVSToPS Input
 
     float3 CameraVector = Input.SavedCameraVector.xyz;
     float3 WorldNormal = normalize(MaterialInputs.Normal);
-    //float2 TexCoord = Input.SavedTexCoords.xy;
+
+    float3 DiffuseColor = MaterialInputs.BaseColor.rgb;
+    float3 EmissiveColor = MaterialInputs.EmissiveColor.rgb;
     float2 TexCoord = 0;
 #if NUM_TEX_COORD_INTERPOLATORS
-    TexCoord = MaterialParameters.TexCoords[0];
+    TexCoord = MaterialParameters.TexCoords[0].xy * (float2)1000.00000000;
+    CameraVector = MaterialParameters.CameraVector;
 #endif
 
     OutTarget0 = float4(CameraVector, TexCoord.x);
     OutTarget1 = float4(WorldNormal, TexCoord.y);
+    OutTarget2 = float4(ddx(TexCoord), ddy(TexCoord));
+    OutTarget3 = float4(DiffuseColor + EmissiveColor, 1.0f);
 }

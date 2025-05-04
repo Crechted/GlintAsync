@@ -62,7 +62,7 @@ FPrimitiveViewRelevance FCustomWaterMeshSceneProxy::GetViewRelevance(const FScen
 
     /*Result.bDrawRelevance = IsShown(View);
     Result.bDynamicRelevance = true;
-    Result.bRenderInMainPass = true;*/
+    Result.bRenderInMainPass = false;*/
     return Result;
 }
 

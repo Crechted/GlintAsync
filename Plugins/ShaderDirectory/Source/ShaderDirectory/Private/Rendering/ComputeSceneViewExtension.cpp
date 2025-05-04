@@ -76,15 +76,25 @@ void FComputeSceneViewExtension::SetupView(FSceneViewFamily& InViewFamily, FScen
     if (!GlintWorldNormalTextureRT)
         UE_LOG(LogTexture, Error, TEXT("No Glint World Normal Texture Target found"));
 
-    if (!GlintResultRT)
-        GlintResultRT = GetDefault<UGlintsSettings>()->ResultGlintTarget.LoadSynchronous();
-    if (!GlintResultRT)
-        UE_LOG(LogTexture, Error, TEXT("No Glint Result Target found"));
-
     if (!GlintParametersRT)
         GlintParametersRT = GetDefault<UGlintsSettings>()->GlintParametersTarget.LoadSynchronous();
     if (!GlintParametersRT)
         UE_LOG(LogTexture, Error, TEXT("No Glint Parameters RT found"));
+
+    if (!WaterDDTexCoordRT)
+        WaterDDTexCoordRT = GetDefault<UGlintsSettings>()->WaterUVTarget.LoadSynchronous();
+    if (!WaterDDTexCoordRT)
+        UE_LOG(LogTexture, Error, TEXT("No Glint Result Target found"));
+
+    if (!SurfaceColorRT)
+        SurfaceColorRT = GetDefault<UGlintsSettings>()->SurfaceColorTarget.LoadSynchronous();
+    if (!SurfaceColorRT)
+        UE_LOG(LogTexture, Error, TEXT("No Glint Result Target found"));
+
+    if (!GlintResultRT)
+        GlintResultRT = GetDefault<UGlintsSettings>()->ResultGlintTarget.LoadSynchronous();
+    if (!GlintResultRT)
+        UE_LOG(LogTexture, Error, TEXT("No Glint Result Target found"));
 
     FVector2D ViewportSize = FVector2D(InView.UnscaledViewRect.Width(), InView.UnscaledViewRect.Height());
     TryResizeRenderTargets(ViewportSize);
@@ -106,6 +116,18 @@ void FComputeSceneViewExtension::TryResizeRenderTargets(const FVector2D& Viewpor
         GlintWorldNormalTextureRT->ResizeTarget(ViewportSize.X, ViewportSize.Y);
     }
 
+    if (WaterDDTexCoordRT && !(ViewportSize.X == WaterDDTexCoordRT->SizeX && ViewportSize.Y == WaterDDTexCoordRT->SizeY))
+    {
+        if (PooledWaterDDTexCoordRT.IsValid()) PooledWaterDDTexCoordRT.SafeRelease();
+        WaterDDTexCoordRT->ResizeTarget(ViewportSize.X, ViewportSize.Y);
+    }
+
+    if (SurfaceColorRT && !(ViewportSize.X == SurfaceColorRT->SizeX && ViewportSize.Y == SurfaceColorRT->SizeY))
+    {
+        if (PooledSurfaceColorRT.IsValid()) PooledSurfaceColorRT.SafeRelease();
+        SurfaceColorRT->ResizeTarget(ViewportSize.X, ViewportSize.Y);
+    }
+
     if (GlintResultRT && !(ViewportSize.X == GlintResultRT->SizeX && ViewportSize.Y == GlintResultRT->SizeY))
     {
         if (PooledGlintResultRT.IsValid()) PooledGlintResultRT.SafeRelease();
@@ -118,7 +140,7 @@ inline void FComputeSceneViewExtension::PreRenderView_RenderThread(FRDGBuilder& 
     FSceneViewExtensionBase::PreRenderView_RenderThread(GraphBuilder, InView);
     if (!NormalOneRT || !NormalTwoRT || !NormalSource || !NormalSource->GetResource()) return;
 
-    if (!InView.ViewUniformBuffer.IsValid() && InView.bIsViewInfo)
+    /*if (!InView.ViewUniformBuffer.IsValid() && InView.bIsViewInfo)
     {
         if (auto View = static_cast<FViewInfo*>(&InView))
         {
@@ -134,19 +156,15 @@ inline void FComputeSceneViewExtension::PreRenderView_RenderThread(FRDGBuilder& 
 
         //GEngine->LoadBlueNoiseTexture();
         //GEngine->LoadGlintTextures();
-    }
+    }*/
 
     if (!PooledNormalOneRT.IsValid())
     {
-        // Only needs to be done once
-        // However, if you modify the render target asset, eg: change the resolution or pixel format, you may need to recreate the PooledNormalOneRT object
         PooledNormalOneRT = CreatePooledRenderTarget_RenderThread(NormalOneRT);
     }
 
     if (!PooledNormalTwoRT.IsValid())
     {
-        // Only needs to be done once
-        // However, if you modify the render target asset, eg: change the resolution or pixel format, you may need to recreate the PooledNormalOneRT object
         PooledNormalTwoRT = CreatePooledRenderTarget_RenderThread(NormalTwoRT);
     }
 
@@ -188,7 +206,10 @@ void FComputeSceneViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& Gr
 void FComputeSceneViewExtension::CalcGlintWaterPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap,
     const FSceneView& InView, bool bAsyncCompute)
 {
-    if (!GlintResultRT || !GetDefault<UGlintsSettings>()->bCalcGlints) return;
+    if (!GetDefault<UGlintsSettings>()->bCalcGlints
+        || !GlintResultRT || !NormalOneRT || !NormalTwoRT || !GlintWorldNormalTextureRT || !GlintCameraVectorTextureRT || !WaterDDTexCoordRT
+        || !GlintParametersRT)
+        return;
 
     PooledGlintResultRT = PooledGlintResultRT.IsValid() ? PooledGlintResultRT : CreatePooledRenderTarget_RenderThread(GlintResultRT);
 
@@ -200,12 +221,16 @@ void FComputeSceneViewExtension::CalcGlintWaterPass(FRDGBuilder& GraphBuilder, c
     PooledCameraVectorTexturesRT = PooledCameraVectorTexturesRT.IsValid()
                                        ? PooledCameraVectorTexturesRT
                                        : CreatePooledRenderTarget_RenderThread(GlintCameraVectorTextureRT);
+    PooledWaterDDTexCoordRT = PooledWaterDDTexCoordRT.IsValid()
+                                  ? PooledWaterDDTexCoordRT
+                                  : CreatePooledRenderTarget_RenderThread(WaterDDTexCoordRT);
+
     PooledGlintParametersRT = PooledGlintParametersRT.IsValid()
                                   ? PooledGlintParametersRT
                                   : CreatePooledRenderTarget_RenderThread(GlintParametersRT);
 
-    if (!PooledGlintResultRT || !PooledNormalOneRT || !PooledNormalTwoRT || !PooledWorldNormalTexturesRT || !PooledCameraVectorTexturesRT ||
-        !PooledGlintParametersRT)
+    if (!PooledGlintResultRT || !PooledNormalOneRT || !PooledNormalTwoRT || !PooledWorldNormalTexturesRT || !PooledCameraVectorTexturesRT
+        || !PooledWaterDDTexCoordRT || !PooledGlintParametersRT)
         return;
 
     RDG_GPU_STAT_SCOPE(GraphBuilder, NormalCompute);
@@ -218,6 +243,8 @@ void FComputeSceneViewExtension::CalcGlintWaterPass(FRDGBuilder& GraphBuilder, c
     FRDGTextureRef RDGGlintWorldNormalTextureRT = GraphBuilder.RegisterExternalTexture(PooledWorldNormalTexturesRT,
         TEXT("Bound Render Target"));
     FRDGTextureRef RDGGlintCameraVectorTextureRT = GraphBuilder.RegisterExternalTexture(PooledCameraVectorTexturesRT,
+        TEXT("Bound Render Target"));
+    FRDGTextureRef RDGWaterUVTextureRT = GraphBuilder.RegisterExternalTexture(PooledWaterDDTexCoordRT,
         TEXT("Bound Render Target"));
     FRDGTextureRef RDGGlintParametersRT = GraphBuilder.RegisterExternalTexture(PooledGlintParametersRT, TEXT("Bound Render Target"));
 
@@ -240,6 +267,7 @@ void FComputeSceneViewExtension::CalcGlintWaterPass(FRDGBuilder& GraphBuilder, c
     Parameters->NormalTexture2 = RDGNormalTwoRT;
     Parameters->WorldNormalTexture = RDGGlintWorldNormalTextureRT;
     Parameters->CameraVectorTexture = RDGGlintCameraVectorTextureRT;
+    Parameters->WaterUVTexture = RDGWaterUVTextureRT;
     Parameters->GlintParamsTexture = RDGGlintParametersRT;
     Parameters->GlintsResultTexture = TempUAV;
     Parameters->LightVector = GetDefault<UGlintsSettings>()->LightVector;
@@ -262,13 +290,15 @@ void FComputeSceneViewExtension::DrawWaterMesh(FRDGBuilder& GraphBuilder, const 
 {
     RDG_GPU_STAT_SCOPE(GraphBuilder, NormalCompute);
     RDG_EVENT_SCOPE(GraphBuilder, "Vertex and Pixel Water");
-    if (!GlintCameraVectorTextureRT || !GlintWorldNormalTextureRT) return;
+    if (!GlintCameraVectorTextureRT || !GlintWorldNormalTextureRT || !WaterDDTexCoordRT || !SurfaceColorRT) return;
 
     if (!PooledCameraVectorTexturesRT.IsValid() || !PooledWorldNormalTexturesRT.IsValid())
     {
         PooledCameraVectorTexturesRT = CreatePooledRenderTarget_RenderThread(GlintCameraVectorTextureRT);
         PooledWorldNormalTexturesRT = CreatePooledRenderTarget_RenderThread(GlintWorldNormalTextureRT);
-        if (!PooledCameraVectorTexturesRT || !PooledWorldNormalTexturesRT) return;
+        PooledWaterDDTexCoordRT = CreatePooledRenderTarget_RenderThread(WaterDDTexCoordRT);
+        PooledSurfaceColorRT = CreatePooledRenderTarget_RenderThread(SurfaceColorRT);
+        if (!PooledCameraVectorTexturesRT || !PooledWorldNormalTexturesRT || !PooledWaterDDTexCoordRT || !PooledSurfaceColorRT) return;
     }
 
     if (InView.bIsViewInfo && InView.ViewUniformBuffer.IsValid())
@@ -278,11 +308,15 @@ void FComputeSceneViewExtension::DrawWaterMesh(FRDGBuilder& GraphBuilder, const 
 
         FRDGTextureRef CameraVectorTexture = GraphBuilder.RegisterExternalTexture(PooledCameraVectorTexturesRT, TEXT("Bound CameraVector"));
         FRDGTextureRef NormalTexture = GraphBuilder.RegisterExternalTexture(PooledWorldNormalTexturesRT, TEXT("Bound WorldNormal"));
+        FRDGTextureRef UVTexture = GraphBuilder.RegisterExternalTexture(PooledWaterDDTexCoordRT, TEXT("Bound Water UVs Data"));
+        FRDGTextureRef SurfaceColorTexture = GraphBuilder.RegisterExternalTexture(PooledSurfaceColorRT, TEXT("Bound Surface Color"));
 
         TStaticArray<FRenderTargetBinding, MaxSimultaneousRenderTargets> Output;
 
         Output[0] = FRenderTargetBinding(CameraVectorTexture, ERenderTargetLoadAction::EClear);
         Output[1] = FRenderTargetBinding(NormalTexture, ERenderTargetLoadAction::EClear);
+        Output[2] = FRenderTargetBinding(UVTexture, ERenderTargetLoadAction::EClear);
+        Output[3] = FRenderTargetBinding(SurfaceColorTexture, ERenderTargetLoadAction::EClear);
 
         /*FViewShaderParameters Parameters;
         Parameters.View = View->ViewUniformBuffer;
@@ -441,10 +475,7 @@ void FComputeSceneViewExtension::CalcGlintParametersPass(FRDGBuilder& GraphBuild
 
 void FComputeSceneViewExtension::GlintCompose(FRDGBuilder& GraphBuilder, const FSceneView& InView, const FPostProcessingInputs& Inputs)
 {
-    if (!PooledGlintResultRT.IsValid() || !GetDefault<UGlintsSettings>()->bComposeGlints)
-    {
-        PooledGlintResultRT = CreatePooledRenderTarget_RenderThread(GlintResultRT);
-    }
+    if (!GetDefault<UGlintsSettings>()->bComposeGlints || !GlintResultRT || !SurfaceColorRT) return;
 
     RDG_GPU_STAT_SCOPE(GraphBuilder, NormalCompute);
     RDG_EVENT_SCOPE(GraphBuilder, "SceneTextureCompute FOUR");
@@ -461,6 +492,7 @@ void FComputeSceneViewExtension::GlintCompose(FRDGBuilder& GraphBuilder, const F
     Parameters->SceneColorTexture = SceneColourTexture.Texture;
     Parameters->SceneTextures = SceneTextures;
     Parameters->View = InView.ViewUniformBuffer;
+    Parameters->SurfaceColorTexture = SurfaceColorRT->GetResource()->GetTextureRHI();
     Parameters->GlintResultTexture = GlintResultRT->GetResource()->GetTextureRHI();
     Parameters->RenderTargets[0] = FRenderTargetBinding((*Inputs.SceneTextures)->SceneColorTexture, ERenderTargetLoadAction::ELoad);
 
