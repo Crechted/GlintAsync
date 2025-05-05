@@ -13,9 +13,10 @@ UCLASS()
 class SHADERDIRECTORY_API URenderTargetSubsystem : public UEngineSubsystem
 {
     GENERATED_BODY()
+
 private:
     TSharedPtr<class FComputeSceneViewExtension, ESPMode::ThreadSafe> ComputeSceneViewExtension;
-    
+
     UPROPERTY()
     TObjectPtr<UTextureRenderTarget2D> RenderTargetNormalOne = nullptr;
 
@@ -34,7 +35,15 @@ private:
     UPROPERTY()
     TObjectPtr<UTextureRenderTarget2D> RenderTargetGlintParameters = nullptr;
 
+    bool bUseAsync;
+
 public:
     virtual void Initialize(FSubsystemCollectionBase& Collection) override;
     virtual void Deinitialize() override;
+
+    UFUNCTION(BlueprintCallable, Category = "Render Subsystem")
+    void SwitchAsync();
+
+    UFUNCTION(BlueprintCallable, Category = "Render Subsystem")
+    bool IsUseAsync() const { return bUseAsync; }
 };

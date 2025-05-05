@@ -21,3 +21,8 @@ void URenderTargetSubsystem::Deinitialize()
     ComputeSceneViewExtension.Reset();
     ComputeSceneViewExtension = nullptr;
 }
+
+void URenderTargetSubsystem::SwitchAsync()
+{
+    bUseAsync = !bUseAsync;
+}

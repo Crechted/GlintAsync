@@ -22,6 +22,7 @@
 //#include "BasePassRendering.cpp"
 
 #include "AssetDefinition.h"
+#include "RenderTargetSubsystem.h"
 #include "ScenePrivate.h"
 #include "SceneView.h"
 #include "SceneRendering.h"
@@ -140,7 +141,7 @@ inline void FComputeSceneViewExtension::PreRenderView_RenderThread(FRDGBuilder& 
     FSceneViewExtensionBase::PreRenderView_RenderThread(GraphBuilder, InView);
     if (!NormalOneRT || !NormalTwoRT || !NormalSource || !NormalSource->GetResource()) return;
 
-    /*if (!InView.ViewUniformBuffer.IsValid() && InView.bIsViewInfo)
+    if (!InView.ViewUniformBuffer.IsValid() && InView.bIsViewInfo)
     {
         if (auto View = static_cast<FViewInfo*>(&InView))
         {
@@ -154,9 +155,9 @@ inline void FComputeSceneViewExtension::PreRenderView_RenderThread(FRDGBuilder& 
             //CreateViewUniformBuffers(*View, UniformShaderParameters);
         }
 
-        //GEngine->LoadBlueNoiseTexture();
-        //GEngine->LoadGlintTextures();
-    }*/
+        GEngine->LoadBlueNoiseTexture();
+        GEngine->LoadGlintTextures();
+    }
 
     if (!PooledNormalOneRT.IsValid())
     {
@@ -175,24 +176,18 @@ inline void FComputeSceneViewExtension::PreRenderView_RenderThread(FRDGBuilder& 
 
     const FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(GMaxRHIFeatureLevel);
 
-    constexpr bool bUseAsyncCompute = false;
-    const bool bAsyncCompute = /*GSupportsEfficientAsyncCompute &&*/ (GNumExplicitGPUsForRendering == 1) && bUseAsyncCompute;
+    const bool bUseAsyncCompute = GEngine->GetEngineSubsystem<URenderTargetSubsystem>()->IsUseAsync();
+    const bool bAsyncCompute = bUseAsyncCompute /*&& GSupportsEfficientAsyncCompute*/ && (GNumExplicitGPUsForRendering == 1);
 
-    CalcNormalOnePass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
-    CalcNormalTwoPass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
-    CalcGlintParametersPass(GraphBuilder, GlobalShaderMap, bAsyncCompute);
+    CalcNormalOnePass(GraphBuilder, GlobalShaderMap, false);
+    CalcNormalTwoPass(GraphBuilder, GlobalShaderMap, false);
+    CalcGlintParametersPass(GraphBuilder, GlobalShaderMap, false);
+    CalcGlintWaterPass(GraphBuilder, GlobalShaderMap, InView, bAsyncCompute);
 }
 
 void FComputeSceneViewExtension::PostRenderView_RenderThread(FRDGBuilder& GraphBuilder, FSceneView& InView)
 {
     FSceneViewExtensionBase::PostRenderView_RenderThread(GraphBuilder, InView);
-
-    const FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(GMaxRHIFeatureLevel);
-
-    constexpr bool bUseAsyncCompute = false;
-    const bool bAsyncCompute = /*GSupportsEfficientAsyncCompute &&*/ (GNumExplicitGPUsForRendering == 1) && bUseAsyncCompute;
-    DrawWaterMesh(GraphBuilder, InView);
-    CalcGlintWaterPass(GraphBuilder, GlobalShaderMap, InView, bAsyncCompute);
 }
 
 void FComputeSceneViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& GraphBuilder, const FSceneView& InView,
@@ -200,6 +195,9 @@ void FComputeSceneViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& Gr
 {
     FSceneViewExtensionBase::PrePostProcessPass_RenderThread(GraphBuilder, InView, Inputs);
 
+    DrawWaterMesh(GraphBuilder, InView);
+
+    const FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(GMaxRHIFeatureLevel);
     GlintCompose(GraphBuilder, InView, Inputs);
 }
 
@@ -257,7 +255,7 @@ void FComputeSceneViewExtension::CalcGlintWaterPass(FRDGBuilder& GraphBuilder, c
     FGlintWaterTextureCS::FParameters* Parameters = GraphBuilder.AllocParameters<FGlintWaterTextureCS::FParameters>();
     Parameters->View = InView.ViewUniformBuffer;
     Parameters->ClampSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
-    Parameters->NormalSampler = TStaticSamplerState<SF_Bilinear, AM_Wrap, AM_Wrap, AM_Wrap>::GetRHI();
+    Parameters->NormalSampler = TStaticSamplerState<SF_AnisotropicLinear, AM_Wrap, AM_Wrap, AM_Wrap>::GetRHI();
     /*Parameters->NormalTexture1 = NormalOneRT->GetResource()->GetTextureRHI();
     Parameters->NormalTexture2 = NormalTwoRT->GetResource()->GetTextureRHI();
     Parameters->WorldNormalTexture = GlintWorldNormalTextureRT->GetResource()->GetTextureRHI();
@@ -279,7 +277,7 @@ void FComputeSceneViewExtension::CalcGlintWaterPass(FRDGBuilder& GraphBuilder, c
     const FIntVector GroupCount = FComputeShaderUtils::GetGroupCount(ThreadCount,
         FIntPoint(GlintParametersCompute::THREADS_X, GlintParametersCompute::THREADS_Y));
 
-    const ERDGPassFlags PassFlags = /*bAsyncCompute ? ERDGPassFlags::AsyncCompute :*/ ERDGPassFlags::Compute;
+    const ERDGPassFlags PassFlags = bAsyncCompute ? ERDGPassFlags::AsyncCompute : ERDGPassFlags::Compute;
     FComputeShaderUtils::AddPass(GraphBuilder, RDG_EVENT_NAME("GlintResultTextureCompute %u", 4221), PassFlags,
         TShaderMapRef<FGlintWaterTextureCS>(GlobalShaderMap), Parameters, GroupCount);
 
@@ -292,14 +290,20 @@ void FComputeSceneViewExtension::DrawWaterMesh(FRDGBuilder& GraphBuilder, const 
     RDG_EVENT_SCOPE(GraphBuilder, "Vertex and Pixel Water");
     if (!GlintCameraVectorTextureRT || !GlintWorldNormalTextureRT || !WaterDDTexCoordRT || !SurfaceColorRT) return;
 
-    if (!PooledCameraVectorTexturesRT.IsValid() || !PooledWorldNormalTexturesRT.IsValid())
-    {
-        PooledCameraVectorTexturesRT = CreatePooledRenderTarget_RenderThread(GlintCameraVectorTextureRT);
-        PooledWorldNormalTexturesRT = CreatePooledRenderTarget_RenderThread(GlintWorldNormalTextureRT);
-        PooledWaterDDTexCoordRT = CreatePooledRenderTarget_RenderThread(WaterDDTexCoordRT);
-        PooledSurfaceColorRT = CreatePooledRenderTarget_RenderThread(SurfaceColorRT);
-        if (!PooledCameraVectorTexturesRT || !PooledWorldNormalTexturesRT || !PooledWaterDDTexCoordRT || !PooledSurfaceColorRT) return;
-    }
+    PooledCameraVectorTexturesRT = PooledCameraVectorTexturesRT.IsValid()
+                                       ? PooledCameraVectorTexturesRT
+                                       : CreatePooledRenderTarget_RenderThread(GlintCameraVectorTextureRT);
+    PooledWorldNormalTexturesRT = PooledWorldNormalTexturesRT.IsValid()
+                                      ? PooledWorldNormalTexturesRT
+                                      : CreatePooledRenderTarget_RenderThread(GlintWorldNormalTextureRT);
+    PooledWaterDDTexCoordRT = PooledWaterDDTexCoordRT.IsValid()
+                                  ? PooledWaterDDTexCoordRT
+                                  : CreatePooledRenderTarget_RenderThread(WaterDDTexCoordRT);
+    PooledSurfaceColorRT = PooledSurfaceColorRT.IsValid() ? PooledSurfaceColorRT : CreatePooledRenderTarget_RenderThread(SurfaceColorRT);
+
+    if (!PooledCameraVectorTexturesRT || !PooledWorldNormalTexturesRT || !PooledWaterDDTexCoordRT
+        || !PooledSurfaceColorRT)
+        return;
 
     if (InView.bIsViewInfo && InView.ViewUniformBuffer.IsValid())
     {
@@ -399,7 +403,7 @@ void FComputeSceneViewExtension::CalcNormalOnePass(FRDGBuilder& GraphBuilder, co
     const FIntVector GroupCount = FComputeShaderUtils::GetGroupCount(ThreadCount,
         FIntPoint(NormalOneCompute::THREADS_X, NormalOneCompute::THREADS_Y));
 
-    const ERDGPassFlags PassFlags = /*bAsyncCompute ? ERDGPassFlags::AsyncCompute :*/ ERDGPassFlags::Compute;
+    const ERDGPassFlags PassFlags = bAsyncCompute ? ERDGPassFlags::AsyncCompute : ERDGPassFlags::Compute;
     FComputeShaderUtils::AddPass(GraphBuilder, RDG_EVENT_NAME("Normal Compute Pass %u", 2), PassFlags,
         TShaderMapRef<FNormalOneCS>(GlobalShaderMap), Parameters, GroupCount);
 
@@ -431,7 +435,7 @@ void FComputeSceneViewExtension::CalcNormalTwoPass(FRDGBuilder& GraphBuilder, co
     const FIntVector GroupCount = FComputeShaderUtils::GetGroupCount(ThreadCount,
         FIntPoint(NormalTwoCompute::THREADS_X, NormalTwoCompute::THREADS_Y));
 
-    const ERDGPassFlags PassFlags = /*bAsyncCompute ? ERDGPassFlags::AsyncCompute :*/ ERDGPassFlags::Compute;
+    const ERDGPassFlags PassFlags = bAsyncCompute ? ERDGPassFlags::AsyncCompute : ERDGPassFlags::Compute;
     FComputeShaderUtils::AddPass(GraphBuilder, RDG_EVENT_NAME("Normal Compute Pass %u", 1), PassFlags,
         TShaderMapRef<FNormalTwoCS>(GlobalShaderMap), Parameters, GroupCount);
 
@@ -466,7 +470,7 @@ void FComputeSceneViewExtension::CalcGlintParametersPass(FRDGBuilder& GraphBuild
     const FIntVector GroupCount = FComputeShaderUtils::GetGroupCount(ThreadCount,
         FIntPoint(GlintParametersCompute::THREADS_X, GlintParametersCompute::THREADS_Y));
 
-    const ERDGPassFlags PassFlags = /*bAsyncCompute ? ERDGPassFlags::AsyncCompute :*/ ERDGPassFlags::Compute;
+    const ERDGPassFlags PassFlags = bAsyncCompute ? ERDGPassFlags::AsyncCompute : ERDGPassFlags::Compute;
     FComputeShaderUtils::AddPass(GraphBuilder, RDG_EVENT_NAME("Glint Parameters Pass %u", 1), PassFlags,
         TShaderMapRef<FGlintParametersCS>(GlobalShaderMap), Parameters, GroupCount);
 

@@ -1,12 +1,10 @@
 ﻿// Copyright Epic Games, Inc. All Rights Reserved.
 #pragma once
+
 #include "/Engine/Private/ShadingCommon.ush"
 #include "/Engine/Private/Strata/Glint/GlintThirdParty.ush"
 #include "/Engine/Private/BRDF.ush"
 
-#include "/Engine/Private/DeferredShadingCommon.ush"
-#include "/Engine/Private/Common.ush"
-#include "/Engine/Private/SceneTextureParameters.ush"
 //=============================================================================
 //======== Tangent space maths ================================================
 //=============================================================================
@@ -91,17 +89,18 @@ void AccumulateGlintWaterModelCompute(uint3 DispatchThreadID : SV_DispatchThread
     //{
     float2 ScreenUV = DispatchThreadID.xy / TextureSize;
 
-    float4 WorldNormal = WorldNormalTexture.SampleLevel(ClampSampler, ScreenUV, 0);
-    //float3 WorldNormal = WorldNormalTexture.Load(int3(DispatchThreadID.xy, 0)).xyz;
-    float4 CameraVector = CameraVectorTexture.SampleLevel(ClampSampler, ScreenUV, 0);
-    //float3 CameraVector = CameraVectorTexture.Load(int3(DispatchThreadID.xy, 0)).xyz;
-    float4 DDUVsData = WaterUVTexture.SampleLevel(ClampSampler, ScreenUV, 0);
-    float2 MatUV = float2(CameraVector.w, WorldNormal.w);// * (MaterialFloat2)1000.00000000;
+    //float4 WorldNormal = WorldNormalTexture.SampleLevel(ClampSampler, ScreenUV, 0);
+    float4 WorldNormal = WorldNormalTexture.Load(int3(DispatchThreadID.xy, 0));
+    //float4 CameraVector = CameraVectorTexture.SampleLevel(ClampSampler, ScreenUV, 0);
+    float4 CameraVector = CameraVectorTexture.Load(int3(DispatchThreadID.xy, 0));
+    //float4 DDUVsData = WaterUVTexture.SampleLevel(ClampSampler, ScreenUV, 0);
+    float4 DDUVsData = WaterUVTexture.Load(int3(DispatchThreadID.xy, 0));
+    float2 MatUV = float2(CameraVector.w, WorldNormal.w); // * (MaterialFloat2)1000.00000000;
 
     const float3 N = WorldNormal.xyz;
     const float3 V = CameraVector.xyz;
     const float3 L = normalize(LightVector).xyz;
-    
+
     const float3x3 WorldToTangent = make_tbn(N);
 
     const float3 wg = float3(0.0f, 0.0f, 1.0f); //normalize(mul(N, WorldToTangent));
