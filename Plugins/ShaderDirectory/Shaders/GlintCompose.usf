@@ -13,5 +13,5 @@ float4 GlintComposePS(float4 SvPosition : SV_POSITION) : SV_Target0
     const float4 GlintResult = GlintResultTexture.Load(int3(SvPosition.xy, 0));
 
     // Otherwise return greyscale version of scene colour
-    return SceneColour + SurfaceColor + GlintResult;
+    return SceneColour + SurfaceColor * 0 + GlintResult;
 }

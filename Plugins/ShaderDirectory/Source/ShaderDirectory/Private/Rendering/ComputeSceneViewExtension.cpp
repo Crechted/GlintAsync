@@ -21,7 +21,7 @@
 #include "BasePassRendering.inl"
 //#include "BasePassRendering.cpp"
 
-#include "AssetDefinition.h"
+//#include "AssetDefinition.h"
 #include "RenderTargetSubsystem.h"
 #include "ScenePrivate.h"
 #include "SceneView.h"
@@ -176,13 +176,12 @@ inline void FComputeSceneViewExtension::PreRenderView_RenderThread(FRDGBuilder& 
 
     const FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(GMaxRHIFeatureLevel);
 
-    const bool bUseAsyncCompute = GEngine->GetEngineSubsystem<URenderTargetSubsystem>()->IsUseAsync();
-    const bool bAsyncCompute = bUseAsyncCompute /*&& GSupportsEfficientAsyncCompute*/ && (GNumExplicitGPUsForRendering == 1);
+    const bool bAsyncCompute = GEngine->GetEngineSubsystem<URenderTargetSubsystem>()->IsUseAsync() /*&& GSupportsEfficientAsyncCompute*/ &&
+                               (GNumExplicitGPUsForRendering == 1);
 
     CalcNormalOnePass(GraphBuilder, GlobalShaderMap, false);
     CalcNormalTwoPass(GraphBuilder, GlobalShaderMap, false);
     CalcGlintParametersPass(GraphBuilder, GlobalShaderMap, false);
-    CalcGlintWaterPass(GraphBuilder, GlobalShaderMap, InView, bAsyncCompute);
 }
 
 void FComputeSceneViewExtension::PostRenderView_RenderThread(FRDGBuilder& GraphBuilder, FSceneView& InView)
@@ -194,10 +193,13 @@ void FComputeSceneViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& Gr
     const FPostProcessingInputs& Inputs)
 {
     FSceneViewExtensionBase::PrePostProcessPass_RenderThread(GraphBuilder, InView, Inputs);
+    const FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(GMaxRHIFeatureLevel);
 
     DrawWaterMesh(GraphBuilder, InView);
 
-    const FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(GMaxRHIFeatureLevel);
+    const bool bAsyncCompute = GEngine->GetEngineSubsystem<URenderTargetSubsystem>()->IsUseAsync() /*&& GSupportsEfficientAsyncCompute*/ &&
+                               (GNumExplicitGPUsForRendering == 1);
+    CalcGlintWaterPass(GraphBuilder, GlobalShaderMap, InView, bAsyncCompute);
     GlintCompose(GraphBuilder, InView, Inputs);
 }
 
@@ -205,14 +207,14 @@ void FComputeSceneViewExtension::CalcGlintWaterPass(FRDGBuilder& GraphBuilder, c
     const FSceneView& InView, bool bAsyncCompute)
 {
     if (!GetDefault<UGlintsSettings>()->bCalcGlints
-        || !GlintResultRT || !NormalOneRT || !NormalTwoRT || !GlintWorldNormalTextureRT || !GlintCameraVectorTextureRT || !WaterDDTexCoordRT
+        || !GlintResultRT || !NormalOneRT || !SurfaceColorRT || !GlintWorldNormalTextureRT || !GlintCameraVectorTextureRT || !WaterDDTexCoordRT
         || !GlintParametersRT)
         return;
 
     PooledGlintResultRT = PooledGlintResultRT.IsValid() ? PooledGlintResultRT : CreatePooledRenderTarget_RenderThread(GlintResultRT);
 
     PooledNormalOneRT = PooledNormalOneRT.IsValid() ? PooledNormalOneRT : CreatePooledRenderTarget_RenderThread(NormalOneRT);
-    PooledNormalTwoRT = PooledNormalTwoRT.IsValid() ? PooledNormalTwoRT : CreatePooledRenderTarget_RenderThread(NormalTwoRT);
+    PooledSurfaceColorRT = PooledSurfaceColorRT.IsValid() ? PooledSurfaceColorRT : CreatePooledRenderTarget_RenderThread(SurfaceColorRT);
     PooledWorldNormalTexturesRT = PooledWorldNormalTexturesRT.IsValid()
                                       ? PooledWorldNormalTexturesRT
                                       : CreatePooledRenderTarget_RenderThread(GlintWorldNormalTextureRT);
@@ -227,7 +229,7 @@ void FComputeSceneViewExtension::CalcGlintWaterPass(FRDGBuilder& GraphBuilder, c
                                   ? PooledGlintParametersRT
                                   : CreatePooledRenderTarget_RenderThread(GlintParametersRT);
 
-    if (!PooledGlintResultRT || !PooledNormalOneRT || !PooledNormalTwoRT || !PooledWorldNormalTexturesRT || !PooledCameraVectorTexturesRT
+    if (!PooledGlintResultRT || !PooledNormalOneRT || !PooledSurfaceColorRT || !PooledWorldNormalTexturesRT || !PooledCameraVectorTexturesRT
         || !PooledWaterDDTexCoordRT || !PooledGlintParametersRT)
         return;
 
@@ -237,7 +239,7 @@ void FComputeSceneViewExtension::CalcGlintWaterPass(FRDGBuilder& GraphBuilder, c
     FRDGTextureRef RenderTargetTexture = GraphBuilder.RegisterExternalTexture(PooledGlintResultRT, TEXT("Bound Render Target"));
 
     FRDGTextureRef RDGNormalOneRT = GraphBuilder.RegisterExternalTexture(PooledNormalOneRT, TEXT("Bound Render Target"));
-    FRDGTextureRef RDGNormalTwoRT = GraphBuilder.RegisterExternalTexture(PooledNormalTwoRT, TEXT("Bound Render Target"));
+    FRDGTextureRef RDGSurfaceColorRT = GraphBuilder.RegisterExternalTexture(PooledSurfaceColorRT, TEXT("Bound Render Target"));
     FRDGTextureRef RDGGlintWorldNormalTextureRT = GraphBuilder.RegisterExternalTexture(PooledWorldNormalTexturesRT,
         TEXT("Bound Render Target"));
     FRDGTextureRef RDGGlintCameraVectorTextureRT = GraphBuilder.RegisterExternalTexture(PooledCameraVectorTexturesRT,
@@ -257,12 +259,12 @@ void FComputeSceneViewExtension::CalcGlintWaterPass(FRDGBuilder& GraphBuilder, c
     Parameters->ClampSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
     Parameters->NormalSampler = TStaticSamplerState<SF_AnisotropicLinear, AM_Wrap, AM_Wrap, AM_Wrap>::GetRHI();
     /*Parameters->NormalTexture1 = NormalOneRT->GetResource()->GetTextureRHI();
-    Parameters->NormalTexture2 = NormalTwoRT->GetResource()->GetTextureRHI();
+    Parameters->SurfaceColorTexture = NormalTwoRT->GetResource()->GetTextureRHI();
     Parameters->WorldNormalTexture = GlintWorldNormalTextureRT->GetResource()->GetTextureRHI();
     Parameters->CameraVectorTexture = GlintCameraVectorTextureRT->GetResource()->GetTextureRHI();
     Parameters->GlintParamsTexture = GlintParametersRT->GetResource()->GetTextureRHI();*/
     Parameters->NormalTexture1 = RDGNormalOneRT;
-    Parameters->NormalTexture2 = RDGNormalTwoRT;
+    Parameters->SurfaceColorTexture = RDGSurfaceColorRT;
     Parameters->WorldNormalTexture = RDGGlintWorldNormalTextureRT;
     Parameters->CameraVectorTexture = RDGGlintCameraVectorTextureRT;
     Parameters->WaterUVTexture = RDGWaterUVTextureRT;
@@ -301,8 +303,8 @@ void FComputeSceneViewExtension::DrawWaterMesh(FRDGBuilder& GraphBuilder, const 
                                   : CreatePooledRenderTarget_RenderThread(WaterDDTexCoordRT);
     PooledSurfaceColorRT = PooledSurfaceColorRT.IsValid() ? PooledSurfaceColorRT : CreatePooledRenderTarget_RenderThread(SurfaceColorRT);
 
-    if (!PooledCameraVectorTexturesRT || !PooledWorldNormalTexturesRT || !PooledWaterDDTexCoordRT
-        || !PooledSurfaceColorRT)
+    if (!PooledCameraVectorTexturesRT.IsValid() || !PooledWorldNormalTexturesRT.IsValid() || !PooledWaterDDTexCoordRT.IsValid()
+        || !PooledSurfaceColorRT.IsValid())
         return;
 
     if (InView.bIsViewInfo && InView.ViewUniformBuffer.IsValid())

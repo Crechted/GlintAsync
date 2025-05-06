@@ -4,6 +4,17 @@
 #include "/Engine/Generated/Material.ush"
 #include "/Engine/Generated/VertexFactory.ush"
 #include "/Engine/Private/DeferredShadingCommon.ush"
+#include "/Engine/Private/Strata/Glint/GlintThirdParty.ush"
+
+float3x3 make_tbn(float3 n)
+{
+    float a0 = 1.0f / (1.0f + n.z);
+    float b0 = -n.x * n.y * a0;
+    float3 t = normalize(float3(1.0f - n.x * n.x * a0, b0, -n.x));
+    float3 b = normalize(float3(b0, 1.0f - n.y * n.y * a0, -n.y));
+    return float3x3(t, b, n);
+}
+
 
 struct FWaterMeshPassVSToPS
 {
@@ -57,8 +68,15 @@ void MainPS(FWaterMeshPassVSToPS Input
     CameraVector = MaterialParameters.CameraVector;
 #endif
 
+    const float3 N = WorldNormal.xyz;
+    const float3 V = CameraVector.xyz;
+    const float3 L = normalize(float3(0., 1., 0.1)).xyz;
+    const float3x3 WorldToTangent = make_tbn(N);
+    const float3 wo = normalize(mul(V, WorldToTangent));
+    const float3 wi = normalize(mul(L, WorldToTangent));
+    float D = f_P(wo, wi, float3(0.6, 0.15, 0), 0, TexCoord, ddx(TexCoord), ddy(TexCoord), false);
     OutTarget0 = float4(CameraVector, TexCoord.x);
     OutTarget1 = float4(WorldNormal, TexCoord.y);
     OutTarget2 = float4(ddx(TexCoord), ddy(TexCoord));
-    OutTarget3 = float4(DiffuseColor + EmissiveColor, 1.0f);
+    OutTarget3 = float4(D, DiffuseColor + EmissiveColor);
 }
