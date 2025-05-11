@@ -55,4 +55,7 @@ public:
 
     UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Parameters")
     bool bComposeGlints = true;
+
+    UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Parameters")
+    bool bStartAsAsync = false;
 };

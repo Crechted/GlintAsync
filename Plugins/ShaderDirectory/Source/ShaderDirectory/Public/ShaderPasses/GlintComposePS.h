@@ -17,7 +17,7 @@ BEGIN_SHADER_PARAMETER_STRUCT(FGlintComposeParams,)
     SHADER_PARAMETER_STRUCT_REF(FViewUniformShaderParameters, View)
     SHADER_PARAMETER_STRUCT_INCLUDE(FSceneTextureShaderParameters, SceneTextures)
     SHADER_PARAMETER_TEXTURE(Texture2D<float4>, SurfaceColorTexture)
-    SHADER_PARAMETER_TEXTURE(Texture2D<float4>, GlintResultTexture)
+    SHADER_PARAMETER_RDG_TEXTURE_SRV(Texture2D<float4>, GlintResultTexture)
     // Only needed if we're outputting to a render target
     RENDER_TARGET_BINDING_SLOTS()
 END_SHADER_PARAMETER_STRUCT()

@@ -118,8 +118,7 @@ void AccumulateGlintWaterModelCompute(uint3 DispatchThreadID : SV_DispatchThread
 
     //float D = f_P(wo, wi, float3(sigma_x, sigma_y, rho), density, MatUV, ddx(MatUV), ddy(MatUV), false);
     float D = f_P(wo, wi, float3(sigma_x, sigma_y, rho), density, MatUV, DDUVsData.xy, DDUVsData.zw, false);
-    //float D = SurfaceColorTexture.Load(int3(DispatchThreadID.xy, 0)).x;
-    
+    //float D = SurfaceColorTexture.Load(int3(DispatchThreadID.xy, 0)).w;
     float3 wh = normalize(wo + wi);
     float3 wn = float3(-Normals1.x, -Normals1.y, 1.) / sqrt(1 + Normals1.x * Normals1.x + Normals1.y * Normals1.y);
 

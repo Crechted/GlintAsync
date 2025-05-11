@@ -35,7 +35,7 @@ private:
     UPROPERTY()
     TObjectPtr<UTextureRenderTarget2D> RenderTargetGlintParameters = nullptr;
 
-    bool bUseAsync;
+    bool bUseAsync = false;
 
 public:
     virtual void Initialize(FSubsystemCollectionBase& Collection) override;

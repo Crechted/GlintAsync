@@ -12,7 +12,9 @@ void URenderTargetSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
     Super::Initialize(Collection);
 
-    ComputeSceneViewExtension = FSceneViewExtensions::NewExtension<FComputeSceneViewExtension>();    
+    GSupportsEfficientAsyncCompute = true;
+    ComputeSceneViewExtension = FSceneViewExtensions::NewExtension<FComputeSceneViewExtension>();
+    bUseAsync = GetDefault<UGlintsSettings>()->bStartAsAsync;
 }
 
 void URenderTargetSubsystem::Deinitialize()

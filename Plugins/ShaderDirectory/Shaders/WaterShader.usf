@@ -54,29 +54,32 @@ void MainPS(FWaterMeshPassVSToPS Input
 {
     FMaterialPixelParameters MaterialParameters = GetMaterialPixelParameters(Input.FactoryInterpolants, Input.Position);
 
-    FPixelMaterialInputs MaterialInputs;
+    FPixelMaterialInputs MaterialInputs = (FPixelMaterialInputs)0;
     CalcMaterialParametersPost(MaterialParameters, MaterialInputs, Input.Position, true);
+    //CalcMaterialParameters(MaterialParameters, MaterialInputs, Input.Position, true);
 
     float3 CameraVector = Input.SavedCameraVector.xyz;
     float3 WorldNormal = normalize(MaterialInputs.Normal);
 
-    float3 DiffuseColor = MaterialInputs.BaseColor.rgb;
-    float3 EmissiveColor = MaterialInputs.EmissiveColor.rgb;
+    float3 BaseColor = MaterialInputs.BaseColor.xyz * 1.0f;
+    float3 EmissiveColor = MaterialInputs.EmissiveColor.xyz * 1.0f;
+    float3 SurfaceColor = saturate(BaseColor + EmissiveColor);
     float2 TexCoord = 0;
 #if NUM_TEX_COORD_INTERPOLATORS
     TexCoord = MaterialParameters.TexCoords[0].xy * (float2)1000.00000000;
     CameraVector = MaterialParameters.CameraVector;
 #endif
 
-    const float3 N = WorldNormal.xyz;
+    /*const float3 N = WorldNormal.xyz;
     const float3 V = CameraVector.xyz;
     const float3 L = normalize(float3(0., 1., 0.1)).xyz;
     const float3x3 WorldToTangent = make_tbn(N);
     const float3 wo = normalize(mul(V, WorldToTangent));
     const float3 wi = normalize(mul(L, WorldToTangent));
     float D = f_P(wo, wi, float3(0.6, 0.15, 0), 0, TexCoord, ddx(TexCoord), ddy(TexCoord), false);
+    OutTarget3 = float4(SurfaceColor, D);*/
+    OutTarget3 = float4(SurfaceColor, 1);
     OutTarget0 = float4(CameraVector, TexCoord.x);
     OutTarget1 = float4(WorldNormal, TexCoord.y);
     OutTarget2 = float4(ddx(TexCoord), ddy(TexCoord));
-    OutTarget3 = float4(D, DiffuseColor + EmissiveColor);
 }

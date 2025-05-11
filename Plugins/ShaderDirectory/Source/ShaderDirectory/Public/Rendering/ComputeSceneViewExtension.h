@@ -6,30 +6,6 @@
 
 class SHADERDIRECTORY_API FComputeSceneViewExtension : public FSceneViewExtensionBase
 {
-private:
-    TObjectPtr<UTextureRenderTarget2D> NormalOneRT = nullptr;
-    TObjectPtr<UTextureRenderTarget2D> NormalTwoRT = nullptr;
-    TObjectPtr<UTextureRenderTarget2D> GlintParametersRT = nullptr;
-    TObjectPtr<UTextureRenderTarget2D> GlintCameraVectorTextureRT = nullptr;
-    TObjectPtr<UTextureRenderTarget2D> GlintWorldNormalTextureRT = nullptr;
-    TObjectPtr<UTextureRenderTarget2D> WaterDDTexCoordRT = nullptr;
-    TObjectPtr<UTextureRenderTarget2D> SurfaceColorRT = nullptr;
-    TObjectPtr<UTextureRenderTarget2D> GlintResultRT = nullptr;
-
-    TRefCountPtr<IPooledRenderTarget> PooledNormalOneRT;
-    TRefCountPtr<IPooledRenderTarget> PooledNormalTwoRT;
-    TRefCountPtr<IPooledRenderTarget> PooledGlintParametersRT;
-    TRefCountPtr<IPooledRenderTarget> PooledCameraVectorTexturesRT;
-    TRefCountPtr<IPooledRenderTarget> PooledWorldNormalTexturesRT;
-    TRefCountPtr<IPooledRenderTarget> PooledWaterDDTexCoordRT;
-    TRefCountPtr<IPooledRenderTarget> PooledSurfaceColorRT;
-    TRefCountPtr<IPooledRenderTarget> PooledGlintResultRT;
-
-    FRDGTexture* InTexture;
-
-    TObjectPtr<UTextureRenderTarget2D> NormalSource = nullptr;
-    //TObjectPtr<UTextureRenderTarget2D> NormalTwoSource = nullptr;
-
 public:
     FComputeSceneViewExtension(const FAutoRegister& AutoRegister);
 
@@ -65,11 +41,40 @@ public:
     };
 
 private:
+    TObjectPtr<UTextureRenderTarget2D> NormalOneRT = nullptr;
+    TObjectPtr<UTextureRenderTarget2D> NormalTwoRT = nullptr;
+    TObjectPtr<UTextureRenderTarget2D> GlintParametersRT = nullptr;
+    TObjectPtr<UTextureRenderTarget2D> GlintCameraVectorTextureRT = nullptr;
+    TObjectPtr<UTextureRenderTarget2D> GlintWorldNormalTextureRT = nullptr;
+    TObjectPtr<UTextureRenderTarget2D> WaterDDTexCoordRT = nullptr;
+    TObjectPtr<UTextureRenderTarget2D> SurfaceColorRT = nullptr;
+    TObjectPtr<UTextureRenderTarget2D> GlintResultRT = nullptr;
+
+    TRefCountPtr<IPooledRenderTarget> PooledNormalOneRT;
+    TRefCountPtr<IPooledRenderTarget> PooledNormalTwoRT;
+    TRefCountPtr<IPooledRenderTarget> PooledGlintParametersRT;
+    TRefCountPtr<IPooledRenderTarget> PooledCameraVectorTexturesRT;
+    TRefCountPtr<IPooledRenderTarget> PooledWorldNormalTexturesRT;
+    TRefCountPtr<IPooledRenderTarget> PooledWaterDDTexCoordRT;
+    TRefCountPtr<IPooledRenderTarget> PooledSurfaceColorRT;
+    TRefCountPtr<IPooledRenderTarget> PooledGlintResultRT;
+
+    FRDGTexture* InTexture;
+
+    TObjectPtr<UTextureRenderTarget2D> NormalSource = nullptr;
+    //TObjectPtr<UTextureRenderTarget2D> NormalTwoSource = nullptr;
+
+    //FRDGTextureUAVRef TempGlintUAV;
+    FRDGTextureRef TempGlintTexture;
+
+    bool bWasCalcGlints = false;
+
     void DrawWaterMesh(FRDGBuilder& GraphBuilder, const FSceneView& InView);
     void CalcNormalOnePass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, bool bAsyncCompute);
     void CalcNormalTwoPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, bool bAsyncCompute);
     void CalcGlintParametersPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, bool bAsyncCompute);
-    void CalcGlintWaterPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, const FSceneView& InView, bool bAsyncCompute);
+    bool CalcGlintWaterPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, const FSceneView& InView,
+        bool bAsyncCompute);
     void GlintCompose(FRDGBuilder& GraphBuilder, const FSceneView& InView, const FPostProcessingInputs& Inputs);
     TRefCountPtr<IPooledRenderTarget> CreatePooledRenderTarget_RenderThread(UTextureRenderTarget2D* RenderTarget,
         ETextureCreateFlags Flags = TexCreate_RenderTargetable | TexCreate_ShaderResource | TexCreate_UAV);
