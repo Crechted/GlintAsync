@@ -14,6 +14,16 @@ class SHADERDIRECTORY_API URenderTargetSubsystem : public UEngineSubsystem
 {
     GENERATED_BODY()
 
+public:
+    virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+    virtual void Deinitialize() override;
+
+    UFUNCTION(BlueprintCallable, Category = "Render Subsystem")
+    void SwitchAsync();
+
+    UFUNCTION(BlueprintCallable, Category = "Render Subsystem")
+    bool IsUseAsync() const { return bUseAsync; }
+
 private:
     TSharedPtr<class FComputeSceneViewExtension, ESPMode::ThreadSafe> ComputeSceneViewExtension;
 
@@ -37,13 +47,8 @@ private:
 
     bool bUseAsync = false;
 
-public:
-    virtual void Initialize(FSubsystemCollectionBase& Collection) override;
-    virtual void Deinitialize() override;
+    bool IsD3D12AsyncComputeSupported();
+    bool IsAsyncComputeSupported();
+    bool IsVulkanAsyncComputeSupported();
 
-    UFUNCTION(BlueprintCallable, Category = "Render Subsystem")
-    void SwitchAsync();
-
-    UFUNCTION(BlueprintCallable, Category = "Render Subsystem")
-    bool IsUseAsync() const { return bUseAsync; }
 };

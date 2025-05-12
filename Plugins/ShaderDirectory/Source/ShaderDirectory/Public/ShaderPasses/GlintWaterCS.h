@@ -21,7 +21,7 @@ BEGIN_SHADER_PARAMETER_STRUCT(FGlintTextureComputeParams,)
 
     //SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float4>, SceneColorTexture)
     SHADER_PARAMETER_TEXTURE(Texture2D<float4>, NormalTexture1)
-    SHADER_PARAMETER_TEXTURE(Texture2D<float4>, SurfaceColorTexture)
+    SHADER_PARAMETER_TEXTURE(Texture2D<float4>, CustomTexture)
     SHADER_PARAMETER_TEXTURE(Texture2D<float4>, WaterUVTexture)
     SHADER_PARAMETER_TEXTURE(Texture2D<float4>, GlintParamsTexture)
     SHADER_PARAMETER_TEXTURE(Texture2D<float4>, WorldNormalTexture)

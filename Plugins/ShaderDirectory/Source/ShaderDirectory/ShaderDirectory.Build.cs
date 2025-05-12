@@ -13,6 +13,9 @@ public class ShaderDirectory : ModuleRules
 			new string[] {
 				// ... add public include paths required here ...
 				Path.Combine(GetModuleDirectory("Renderer"), "Private"),
+				Path.Combine(GetModuleDirectory("D3D12RHI"), "Private"),
+				Path.Combine(Target.UEThirdPartySourceDirectory, "Windows", "D3DX12", "include"),
+				Path.Combine(Target.UEThirdPartySourceDirectory, "Windows", "DirectX", "include"),
 			}
 			);
 				
@@ -27,7 +30,7 @@ public class ShaderDirectory : ModuleRules
 		PublicDependencyModuleNames.AddRange(
 			new string[]
 			{
-				"Core", "RHI", "Engine"
+				"Core", "Engine"
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);
@@ -43,6 +46,7 @@ public class ShaderDirectory : ModuleRules
 				"DeveloperSettings",
                 "RenderCore", 
                 "Renderer",
+				"D3D12RHI", "RHI", "RHICore", "VulkanRHI", "Vulkan"
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);

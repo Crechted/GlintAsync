@@ -4,7 +4,7 @@
 #include "/Engine/Generated/Material.ush"
 #include "/Engine/Generated/VertexFactory.ush"
 #include "/Engine/Private/DeferredShadingCommon.ush"
-#include "/Engine/Private/Strata/Glint/GlintThirdParty.ush"
+#include "GlintThirdParty.ush"
 
 float3x3 make_tbn(float3 n)
 {
@@ -70,16 +70,19 @@ void MainPS(FWaterMeshPassVSToPS Input
     CameraVector = MaterialParameters.CameraVector;
 #endif
 
-    /*const float3 N = WorldNormal.xyz;
+    OutTarget0 = float4(CameraVector, TexCoord.x);
+    OutTarget1 = float4(WorldNormal, TexCoord.y);
+    OutTarget2 = float4(ddx(TexCoord), ddy(TexCoord));
+
+    const float3 N = WorldNormal.xyz;
     const float3 V = CameraVector.xyz;
     const float3 L = normalize(float3(0., 1., 0.1)).xyz;
     const float3x3 WorldToTangent = make_tbn(N);
     const float3 wo = normalize(mul(V, WorldToTangent));
     const float3 wi = normalize(mul(L, WorldToTangent));
-    float D = f_P(wo, wi, float3(0.6, 0.15, 0), 0, TexCoord, ddx(TexCoord), ddy(TexCoord), false);
-    OutTarget3 = float4(SurfaceColor, D);*/
-    OutTarget3 = float4(SurfaceColor, 1);
-    OutTarget0 = float4(CameraVector, TexCoord.x);
-    OutTarget1 = float4(WorldNormal, TexCoord.y);
-    OutTarget2 = float4(ddx(TexCoord), ddy(TexCoord));
+    //float D = f_P(wo, wi, float3(0.6, 0.15, 0), 0, TexCoord, ddx(TexCoord), ddy(TexCoord), false);
+    //float D = f_P_alt(wo, wi, float3(0.6, 0.15, 0), 0, TexCoord, ddx(TexCoord), ddy(TexCoord), slop.xy, slop.zw, false);
+    //OutTarget3 = float4(SurfaceColor, D);
+    //OutTarget3 = float4(SurfaceColor, 1);
+    OutTarget3 = slope(wo, wi);
 }

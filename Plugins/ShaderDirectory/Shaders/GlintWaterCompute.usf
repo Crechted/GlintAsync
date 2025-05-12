@@ -2,7 +2,7 @@
 #pragma once
 
 #include "/Engine/Private/ShadingCommon.ush"
-#include "/Engine/Private/Strata/Glint/GlintThirdParty.ush"
+#include "GlintThirdParty.ush"
 #include "/Engine/Private/BRDF.ush"
 
 //=============================================================================
@@ -69,7 +69,7 @@ SamplerState ClampSampler;
 SamplerState NormalSampler;
 
 Texture2D NormalTexture1;
-Texture2D SurfaceColorTexture;
+Texture2D CustomTexture;
 Texture2D WaterUVTexture;
 Texture2D GlintParamsTexture;
 Texture2D WorldNormalTexture;
@@ -97,6 +97,8 @@ void AccumulateGlintWaterModelCompute(uint3 DispatchThreadID : SV_DispatchThread
     float4 DDUVsData = WaterUVTexture.Load(int3(DispatchThreadID.xy, 0));
     float2 MatUV = float2(CameraVector.w, WorldNormal.w); // * (MaterialFloat2)1000.00000000;
 
+    float4 SlopeRes = CustomTexture.Load(int3(DispatchThreadID.xy, 0));
+
     const float3 N = WorldNormal.xyz;
     const float3 V = CameraVector.xyz;
     const float3 L = normalize(LightVector).xyz;
@@ -117,8 +119,9 @@ void AccumulateGlintWaterModelCompute(uint3 DispatchThreadID : SV_DispatchThread
     float rho = GlintParams.z;
 
     //float D = f_P(wo, wi, float3(sigma_x, sigma_y, rho), density, MatUV, ddx(MatUV), ddy(MatUV), false);
-    float D = f_P(wo, wi, float3(sigma_x, sigma_y, rho), density, MatUV, DDUVsData.xy, DDUVsData.zw, false);
-    //float D = SurfaceColorTexture.Load(int3(DispatchThreadID.xy, 0)).w;
+    //float D = f_P(wo, wi, float3(sigma_x, sigma_y, rho), density, MatUV, DDUVsData.xy, DDUVsData.zw, false);
+    float D = f_P_alt(wo, wi, float3(sigma_x, sigma_y, rho), density, MatUV, DDUVsData.xy, DDUVsData.zw, SlopeRes.xy, SlopeRes.zw, false);
+    //float D_alt = CustomTexture.Load(int3(DispatchThreadID.xy, 0)).w;
     float3 wh = normalize(wo + wi);
     float3 wn = float3(-Normals1.x, -Normals1.y, 1.) / sqrt(1 + Normals1.x * Normals1.x + Normals1.y * Normals1.y);
 
@@ -141,6 +144,6 @@ void AccumulateGlintWaterModelCompute(uint3 DispatchThreadID : SV_DispatchThread
 
     float3 GlintRes = slope_projected_area.z * (F * G * D) / 4.;
 
-    GlintsResultTexture[DispatchThreadID.xy] = GlintRes;
+    GlintsResultTexture[DispatchThreadID.xy] = D;
     //}
 }

@@ -284,7 +284,7 @@ bool FComputeSceneViewExtension::CalcGlintWaterPass(FRDGBuilder& GraphBuilder, c
     Parameters->NormalSampler = TStaticSamplerState<SF_AnisotropicLinear, AM_Wrap, AM_Wrap, AM_Wrap>::GetRHI();
 
     Parameters->NormalTexture1 = NormalOneRT->GetResource()->GetTextureRHI();
-    Parameters->SurfaceColorTexture = SurfaceColorRT->GetResource()->GetTextureRHI();
+    Parameters->CustomTexture = SurfaceColorRT->GetResource()->GetTextureRHI();
     Parameters->WorldNormalTexture = GlintWorldNormalTextureRT->GetResource()->GetTextureRHI();
     Parameters->CameraVectorTexture = GlintCameraVectorTextureRT->GetResource()->GetTextureRHI();
     Parameters->GlintParamsTexture = GlintParametersRT->GetResource()->GetTextureRHI();
@@ -550,7 +550,7 @@ void FComputeSceneViewExtension::GlintCompose(FRDGBuilder& GraphBuilder, const F
     Parameters->SceneColorTexture = SceneColourTexture.Texture;
     Parameters->SceneTextures = SceneTextures;
     Parameters->View = InView.ViewUniformBuffer;
-    Parameters->SurfaceColorTexture = SurfaceColorRT->GetResource()->GetTextureRHI();
+    Parameters->CustomTexture = SurfaceColorRT->GetResource()->GetTextureRHI();
     Parameters->GlintResultTexture = TempGlintSRV; //GlintResultRT->GetResource()->GetTextureRHI();
     Parameters->RenderTargets[0] = FRenderTargetBinding((*Inputs.SceneTextures)->SceneColorTexture, ERenderTargetLoadAction::ELoad);
 
