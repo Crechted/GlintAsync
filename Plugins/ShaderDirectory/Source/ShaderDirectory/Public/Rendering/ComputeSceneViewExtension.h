@@ -1,8 +1,6 @@
 ﻿#pragma once
 
-
 #include "SceneViewExtension.h"
-
 
 class SHADERDIRECTORY_API FComputeSceneViewExtension : public FSceneViewExtensionBase
 {
@@ -21,9 +19,7 @@ public:
     }
 
     virtual void PostRenderBasePassDeferred_RenderThread(FRDGBuilder& GraphBuilder, FSceneView& InView,
-        const FRenderTargetBindingSlots& RenderTargets, TRDGUniformBufferRef<FSceneTextureUniformParameters> SceneTextures) override
-    {
-    };
+        const FRenderTargetBindingSlots& RenderTargets, TRDGUniformBufferRef<FSceneTextureUniformParameters> SceneTextures) override;
 
     virtual void PreRenderViewFamily_RenderThread(FRDGBuilder& GraphBuilder, FSceneViewFamily& InViewFamily) override
     {
@@ -33,8 +29,8 @@ public:
 
     virtual void PostRenderView_RenderThread(FRDGBuilder& GraphBuilder, FSceneView& InView) override;
 
-    virtual void PrePostProcessPass_RenderThread(FRDGBuilder& GraphBuilder, const FSceneView& View,
-        const FPostProcessingInputs& Inputs) override;
+    virtual void PrePostProcessPass_RenderThread(
+        FRDGBuilder& GraphBuilder, const FSceneView& View, const FPostProcessingInputs& Inputs) override;
 
     virtual void PostRenderViewFamily_RenderThread(FRDGBuilder& GraphBuilder, FSceneViewFamily& InViewFamily) override
     {
@@ -47,8 +43,8 @@ private:
     TObjectPtr<UTextureRenderTarget2D> GlintCameraVectorTextureRT = nullptr;
     TObjectPtr<UTextureRenderTarget2D> GlintWorldNormalTextureRT = nullptr;
     TObjectPtr<UTextureRenderTarget2D> WaterDDTexCoordRT = nullptr;
-    TObjectPtr<UTextureRenderTarget2D> SurfaceColorRT = nullptr;
-    TObjectPtr<UTextureRenderTarget2D> GlintResultRT = nullptr;
+    TObjectPtr<UTextureRenderTarget2D> CustomTexture1RT = nullptr;
+    TObjectPtr<UTextureRenderTarget2D> CustomTexture2RT = nullptr;
 
     TRefCountPtr<IPooledRenderTarget> PooledNormalOneRT;
     TRefCountPtr<IPooledRenderTarget> PooledNormalTwoRT;
@@ -56,27 +52,25 @@ private:
     TRefCountPtr<IPooledRenderTarget> PooledCameraVectorTexturesRT;
     TRefCountPtr<IPooledRenderTarget> PooledWorldNormalTexturesRT;
     TRefCountPtr<IPooledRenderTarget> PooledWaterDDTexCoordRT;
-    TRefCountPtr<IPooledRenderTarget> PooledSurfaceColorRT;
-    TRefCountPtr<IPooledRenderTarget> PooledGlintResultRT;
-
-    FRDGTexture* InTexture;
+    TRefCountPtr<IPooledRenderTarget> PooledCustomTexture1RT;
+    TRefCountPtr<IPooledRenderTarget> PooledCustomTexture2RT;
 
     TObjectPtr<UTextureRenderTarget2D> NormalSource = nullptr;
-    //TObjectPtr<UTextureRenderTarget2D> NormalTwoSource = nullptr;
+    // TObjectPtr<UTextureRenderTarget2D> NormalTwoSource = nullptr;
 
-    //FRDGTextureUAVRef TempGlintUAV;
-    FRDGTextureRef TempGlintTexture;
+    // FRDGTextureUAVRef TempGlintUAV;
+    FRDGTextureRef TempGlintTexture = nullptr;
 
     bool bWasCalcGlints = false;
 
+    bool ShouldUseAsync() const;
+    void CreateTempTexture(FRDGBuilder& GraphBuilder);
     void DrawWaterMesh(FRDGBuilder& GraphBuilder, const FSceneView& InView);
-    void CalcNormalOnePass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, bool bAsyncCompute);
-    void CalcNormalTwoPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, bool bAsyncCompute);
-    void CalcGlintParametersPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, bool bAsyncCompute);
-    bool CalcGlintWaterPass(FRDGBuilder& GraphBuilder, const FGlobalShaderMap* GlobalShaderMap, const FSceneView& InView,
-        bool bAsyncCompute);
+    void CalcNormalOnePass(FRDGBuilder& GraphBuilder, bool bAsyncCompute);
+    void CalcNormalTwoPass(FRDGBuilder& GraphBuilder, bool bAsyncCompute);
+    void CalcGlintParametersPass(FRDGBuilder& GraphBuilder, bool bAsyncCompute);
+    bool CalcGlintWaterPass(FRDGBuilder& GraphBuilder, const FSceneView& InView, bool bAsyncCompute);
     void GlintCompose(FRDGBuilder& GraphBuilder, const FSceneView& InView, const FPostProcessingInputs& Inputs);
     TRefCountPtr<IPooledRenderTarget> CreatePooledRenderTarget_RenderThread(UTextureRenderTarget2D* RenderTarget,
         ETextureCreateFlags Flags = TexCreate_RenderTargetable | TexCreate_ShaderResource | TexCreate_UAV);
-
 };

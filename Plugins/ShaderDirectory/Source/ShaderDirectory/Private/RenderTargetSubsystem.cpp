@@ -25,10 +25,7 @@ void URenderTargetSubsystem::Initialize(FSubsystemCollectionBase& Collection)
     Super::Initialize(Collection);
 
     bUseAsync = GetDefault<UGlintsSettings>()->bStartAsAsync;
-    if (IsUseAsync() && !GSupportsEfficientAsyncCompute)
-    {
-        GSupportsEfficientAsyncCompute = IsAsyncComputeSupported();
-    }
+    GSupportsEfficientAsyncCompute = IsAsyncComputeSupported();
 
     ComputeSceneViewExtension = FSceneViewExtensions::NewExtension<FComputeSceneViewExtension>();
 }
@@ -48,7 +45,8 @@ void URenderTargetSubsystem::SwitchAsync()
 bool URenderTargetSubsystem::IsAsyncComputeSupported()
 {
     if (GDynamicRHI->GetInterfaceType() == ERHIInterfaceType::D3D12) return IsD3D12AsyncComputeSupported();
-    if (GDynamicRHI->GetInterfaceType() == ERHIInterfaceType::Vulkan) return false; //IsVulkanAsyncComputeSupported(); - пока в UE5.3 async на Vulkan не поддерживается
+    if (GDynamicRHI->GetInterfaceType() == ERHIInterfaceType::Vulkan) return false;
+    //IsVulkanAsyncComputeSupported(); - пока в UE5.3 async на Vulkan не поддерживается
     return false;
 }
 
@@ -56,7 +54,7 @@ bool URenderTargetSubsystem::IsD3D12AsyncComputeSupported()
 {
     D3D12_FEATURE_DATA_D3D12_OPTIONS3 options = {};
     ID3D12DynamicRHI* D3D12RHI = GetID3D12DynamicRHI();
-    if (D3D12RHI) return false;
+    if (!D3D12RHI) return false;
 
     ID3D12Device* D3DDevice = D3D12RHI->RHIGetDevice(0);
     if (!D3DDevice) return false;

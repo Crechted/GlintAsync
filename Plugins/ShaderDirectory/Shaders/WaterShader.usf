@@ -50,7 +50,8 @@ void MainPS(FWaterMeshPassVSToPS Input
     , out float4 OutTarget0 : SV_Target0
     , out float4 OutTarget1 : SV_Target1
     , out float4 OutTarget2 : SV_Target2
-    , out float4 OutTarget3 : SV_Target3)
+    , out float4 OutTarget3 : SV_Target3
+    , out float4 OutTarget4 : SV_Target4)
 {
     FMaterialPixelParameters MaterialParameters = GetMaterialPixelParameters(Input.FactoryInterpolants, Input.Position);
 
@@ -67,12 +68,9 @@ void MainPS(FWaterMeshPassVSToPS Input
     float2 TexCoord = 0;
 #if NUM_TEX_COORD_INTERPOLATORS
     TexCoord = MaterialParameters.TexCoords[0].xy * (float2)1000.00000000;
+    //TexCoord = MaterialParameters.TexCoords[0].xy * (float2)10.00000000;
     CameraVector = MaterialParameters.CameraVector;
 #endif
-
-    OutTarget0 = float4(CameraVector, TexCoord.x);
-    OutTarget1 = float4(WorldNormal, TexCoord.y);
-    OutTarget2 = float4(ddx(TexCoord), ddy(TexCoord));
 
     const float3 N = WorldNormal.xyz;
     const float3 V = CameraVector.xyz;
@@ -80,9 +78,14 @@ void MainPS(FWaterMeshPassVSToPS Input
     const float3x3 WorldToTangent = make_tbn(N);
     const float3 wo = normalize(mul(V, WorldToTangent));
     const float3 wi = normalize(mul(L, WorldToTangent));
+    const float4 slop = slope(wo, wi);;
     //float D = f_P(wo, wi, float3(0.6, 0.15, 0), 0, TexCoord, ddx(TexCoord), ddy(TexCoord), false);
     //float D = f_P_alt(wo, wi, float3(0.6, 0.15, 0), 0, TexCoord, ddx(TexCoord), ddy(TexCoord), slop.xy, slop.zw, false);
-    //OutTarget3 = float4(SurfaceColor, D);
-    //OutTarget3 = float4(SurfaceColor, 1);
-    OutTarget3 = slope(wo, wi);
+    //OutTarget3 = slop;
+    //OutTarget4 = float4(D, D, D, D);
+    //OutTarget4 = float4(SurfaceColor, 1);
+    
+    OutTarget0 = float4(CameraVector, TexCoord.x);
+    OutTarget1 = float4(WorldNormal, TexCoord.y);
+    OutTarget2 = float4(ddx(TexCoord), ddy(TexCoord));
 }

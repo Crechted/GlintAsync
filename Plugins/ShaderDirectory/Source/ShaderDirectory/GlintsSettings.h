@@ -36,7 +36,7 @@ public:
     TSoftObjectPtr<UTextureRenderTarget2D> WaterUVTarget = nullptr;
 
     UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "RenderTargets")
-    TSoftObjectPtr<UTextureRenderTarget2D> SurfaceColorTarget = nullptr;
+    TSoftObjectPtr<UTextureRenderTarget2D> CustomDataTarget = nullptr;
 
     UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "RenderTargets")
     TSoftObjectPtr<UTextureRenderTarget2D> ResultGlintTarget = nullptr;
